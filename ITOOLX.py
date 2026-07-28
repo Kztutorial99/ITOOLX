@@ -33,7 +33,7 @@ except ImportError:
     from rich.rule import Rule
     from rich.text import Text
 
-console = Console()
+console = Console(highlight=False)
 
 # ══════════════════════════════════════════════════════════════
 #  CONFIG
@@ -93,16 +93,16 @@ def rand_sec_ch(ver: int = None) -> str:
     v = ver or random.choice([114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128])
     return random.choice(SEC_CH_BRANDS).replace("{v}", str(v))
 
-BANNER = """\
-[bold bright_cyan]  ╔══════════════════════════════════════╗[/bold bright_cyan]
-[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]██╗[/bold white] [cyan]████████╗[/cyan][white]██████╗ [/white][bright_blue] ██╗     ██╗  ██╗[/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
-[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]██║[/bold white] [cyan]╚══██╔══╝[/cyan][white]██╔═══██╗[/white][bright_blue]██║     ╚██╗██╔╝[/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
-[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]██║[/bold white] [cyan]   ██║  [/cyan][white]██║   ██║[/white][bright_blue]██║      ╚███╔╝ [/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
-[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]██║[/bold white] [cyan]   ██║  [/cyan][white]██║   ██║[/white][bright_blue]██║      ██╔██╗ [/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
-[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]██║[/bold white] [cyan]   ██║  [/cyan][white]╚██████╔╝[/white][bright_blue]███████╗██╔╝ ██╗[/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
-[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]╚═╝[/bold white] [cyan]   ╚═╝  [/cyan][white] ╚═════╝ [/white][bright_blue]╚══════╝╚═╝  ╚═╝[/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
-[bold bright_cyan]  ╚══════════════════════════════════════╝[/bold bright_cyan]
-  [dim]       Multi-API OTP Sender  •  Termux Edition[/dim]"""
+BANNER = Text.assemble(
+    ("\n", ""),
+    (" ██╗████████╗ ██████╗  ██╗     ██╗ ██╗\n", "bold bright_cyan"),
+    (" ██║╚══██╔══╝██╔═══██╗ ██║     ╚██╗██╔╝\n", "bold cyan"),
+    (" ██║   ██║   ██║   ██║ ██║      ╚███╔╝ \n", "bold blue"),
+    (" ██║   ██║   ██║   ██║ ██║      ██╔██╗ \n", "bold cyan"),
+    (" ██║   ██║   ╚██████╔╝ ███████╗██╔╝ ██╗\n", "bold bright_cyan"),
+    (" ╚═╝   ╚═╝    ╚═════╝  ╚══════╝╚═╝  ╚═╝\n", "bold white"),
+    (" Multi-API OTP · Termux Edition\n", "dim"),
+)
 
 # ══════════════════════════════════════════════════════════════
 #  STATE
@@ -145,7 +145,7 @@ def flush_stdin():
 def sanitize_preview(text: str, maxlen: int = 80) -> str:
     """Buang karakter non-printable & escape Rich markup bracket."""
     text = re.sub(r"[^\x20-\x7E\n]", "", text)   # hanya ASCII printable
-    text = text.replace("[", "\[")                    # escape Rich markup
+    text = text.replace("[", "\\[")                   # escape Rich markup
     text = text.replace("\n", " ").strip()
     return (text[:maxlen] + "...") if len(text) > maxlen else text
 
@@ -305,19 +305,19 @@ def render_menu(phone: str = "") -> Table:
             "[bold cyan]PILIH TARGET[/bold cyan]"
             + (f"  [dim]-> {phone}[/dim]" if phone else "")
         ),
-        box=box.HEAVY_HEAD, border_style="bright_cyan",
-        header_style="bold bright_white on dark_cyan", show_lines=True,
+        box=box.SIMPLE_HEAD, border_style="bright_cyan",
+        header_style="bold bright_cyan", show_lines=False, padding=(0,1),
     )
-    t.add_column("No",  width=4,  justify="center", style="bold white")
-    t.add_column("Tag", width=5,  justify="center")
-    t.add_column("API", width=16, style="bold")
-    t.add_column("Via", width=10)
-    t.add_column("CD",  width=9,  justify="center")
+    t.add_column("#",   width=3,  justify="center", style="bold white")
+    t.add_column("Tag", width=4,  justify="center")
+    t.add_column("API", width=12, style="bold")
+    t.add_column("Via", width=8)
+    t.add_column("CD",  width=6,  justify="right")
 
     for num, api in APIS.items():
         cd_txt = "[dim]each[/dim]" if api["method"] == "all" else f"[dim]{api['cooldown']}s[/dim]"
         t.add_row(
-            f"[cyan]{num}[/cyan]",
+            f"[bright_cyan]{num}[/bright_cyan]",
             f"[{api['color']}]{api['tag']}[/{api['color']}]",
             f"[{api['color']}]{api['name']}[/{api['color']}]",
             f"[dim]{api['desc']}[/dim]",
@@ -328,9 +328,9 @@ def render_menu(phone: str = "") -> Table:
 
 def print_home(phone: str = ""):
     clr()
-    console.print(Align.center(BANNER))
+    console.print(BANNER)
     console.print()
-    console.print(Align.center(render_menu(phone)))
+    console.print(render_menu(phone))
     console.print()
 
 # ══════════════════════════════════════════════════════════════
@@ -340,13 +340,12 @@ def print_home(phone: str = ""):
 def build_cd_panel(phone: str, targets: list, title: str = "") -> Panel:
     t = Table(
         box=box.SIMPLE_HEAD, show_header=True, show_lines=False,
-        padding=(0, 1), header_style="bold bright_white",
+        padding=(0, 1), header_style="bold bright_cyan",
     )
-    t.add_column("API",      width=16)
-    t.add_column("Progress", width=16)
-    t.add_column("Sisa",     width=8,  justify="right")
-    t.add_column("Unlock",   width=9,  justify="center")
-    t.add_column("Status",   width=7,  justify="center")
+    t.add_column("API",  width=11)
+    t.add_column("Bar",  width=12)
+    t.add_column("Sisa", width=6,  justify="right")
+    t.add_column("Sts",  width=6,  justify="center")
 
     for api in targets:
         if api["method"] == "all":
@@ -356,20 +355,20 @@ def build_cd_panel(phone: str, targets: list, title: str = "") -> Panel:
         cd   = api["cooldown"]
 
         if rem > 0 and sent:
-            fill  = max(0, int((cd - rem) / cd * 14))
-            bar   = f"[bright_cyan]{'━'*fill}[/bright_cyan][dim]{'╌'*(14-fill)}[/dim]"
+            fill  = max(0, int((cd - rem) / cd * 10))
+            bar   = f"[bright_cyan]{'━'*fill}[/bright_cyan][dim]{'╌'*(10-fill)}[/dim]"
             sisa  = f"[bold red]{fmt_rem(rem):>6}[/bold red]"
             ul    = datetime.fromtimestamp(sent + cd).strftime("%H:%M:%S")
             stat  = "[red] WAIT [/red]"
         else:
-            bar   = "[bold bright_green]" + "━" * 14 + "[/bold bright_green]"
+            bar   = "[bold bright_green]" + "━" * 10 + "[/bold bright_green]"
             sisa  = "[bold green]  0s[/bold green]"
             ul    = "[dim]  --   [/dim]"
             stat  = "[bold green] READY [/bold green]"
 
         t.add_row(
             f"[{api['color']}]{api['name']}[/{api['color']}]",
-            bar, sisa, f"[dim]{ul}[/dim]", stat,
+            bar, sisa, stat,
         )
 
     now = datetime.now().strftime("%H:%M:%S")
@@ -431,7 +430,7 @@ def ask_yrn(before_send: bool = False) -> str:
         title = "[bold green]SIAP[/bold green]"
         border = "green"
 
-    console.print(Panel(desc, title=title, border_style=border, padding=(0, 2)))
+    console.print(Panel(desc, title=title, border_style=border, padding=(0, 1)))
     while True:
         try:
             flush_stdin()
@@ -452,21 +451,18 @@ def show_result(api: dict, phone: str, res: dict, round_n: int):
     prev      = sanitize_preview(body, 80)
     lbl, col  = status_fmt(code)
 
-    icon   = "✅" if is_ok(code) else "❌"
-    h_line = "[bright_cyan]" + "─" * 36 + "[/bright_cyan]"
-    console.print(Align.center(Panel(
-        f"  {h_line}\n"
-        f"  [bold bright_white]▸ API   [/bold bright_white][{api['color']}]{api['tag']}  {api['name']}[/{api['color']}]\n"
-        f"  [bold bright_white]▸ Nomor [/bold bright_white][bright_yellow]{phone}[/bright_yellow]\n"
-        f"  [bold bright_white]▸ Round [/bold bright_white][dim]{round_n}[/dim]\n"
-        f"  [bold bright_white]▸ HTTP  [/bold bright_white][{col}]{code}[/{col}]   [{col}]{lbl}[/{col}]\n"
-        f"  [bold bright_white]▸ Waktu [/bold bright_white][dim]{datetime.now().strftime('%H:%M:%S')}[/dim]\n"
-        f"  {h_line}\n"
-        f"  [dim]{prev}[/dim]",
-        title=f" {icon}  [{col}]{lbl}[/{col}] ",
+    icon = "✅" if is_ok(code) else "❌"
+    console.print(Panel(
+        f"[bold bright_white]▸ API  [/bold bright_white] [{api['color']}]{api['tag']} {api['name']}[/{api['color']}]\n"
+        f"[bold bright_white]▸ No   [/bold bright_white] [bright_yellow]{phone}[/bright_yellow]\n"
+        f"[bold bright_white]▸ Rnd  [/bold bright_white] [dim]{round_n}[/dim]\n"
+        f"[bold bright_white]▸ HTTP [/bold bright_white] [{col}]{code} {lbl}[/{col}]\n"
+        f"[bold bright_white]▸ Jam  [/bold bright_white] [dim]{datetime.now().strftime('%H:%M:%S')}[/dim]\n"
+        f"[dim]{prev}[/dim]",
+        title=f"{icon} [{col}]{lbl}[/{col}]",
         border_style="bright_green" if is_ok(code) else "bright_red",
-        padding=(1, 2),
-    )))
+        padding=(0, 1),
+    ))
     console.print()
 
 
@@ -474,14 +470,14 @@ def show_all_results(phone: str, results: list, round_n: int):
     clr()
     t = Table(
         title=f"[bold cyan]ALL TARGETS   Round {round_n}   {phone}[/bold cyan]",
-        box=box.HEAVY_HEAD, border_style="bright_cyan",
-        header_style="bold bright_white on dark_cyan", show_lines=True,
+        box=box.SIMPLE_HEAD, border_style="bright_cyan",
+        header_style="bold bright_cyan", show_lines=False, padding=(0,1),
     )
-    t.add_column("Tag",    width=5,  justify="center")
-    t.add_column("API",    width=16)
-    t.add_column("HTTP",   width=6,  justify="center")
-    t.add_column("Status", width=10)
-    t.add_column("Jam",    width=9,  justify="center")
+    t.add_column("Tag",  width=4,  justify="center")
+    t.add_column("API",  width=10)
+    t.add_column("HTTP", width=5,  justify="center")
+    t.add_column("Sts",  width=8)
+    t.add_column("Jam",  width=8,  justify="center")
 
     for item in results:
         lbl, col = status_fmt(item["status"])
@@ -492,7 +488,7 @@ def show_all_results(phone: str, results: list, round_n: int):
             f"[{col}]{lbl}[/{col}]",
             f"[dim]{item['time']}[/dim]",
         )
-    console.print(Align.center(t))
+    console.print(t)
     console.print()
 
 # ══════════════════════════════════════════════════════════════
@@ -510,17 +506,15 @@ def build_r_live(phone: str, targets: list, stats: dict,
     # ── tabel hasil
     t = Table(
         title=title,
-        box=box.ROUNDED, border_style="cyan",
-        header_style="bold cyan", show_lines=True,
+        box=box.SIMPLE_HEAD, border_style="bright_cyan",
+        header_style="bold bright_cyan", show_lines=False, padding=(0,1),
     )
-    t.add_column("Tag",    width=5,  justify="center")
-    t.add_column("API",    width=14)
-    t.add_column("Round",  width=6,  justify="center")
-    t.add_column("HTTP",   width=6,  justify="center")
-    t.add_column("Status", width=10)
-    t.add_column("OK",     width=5,  justify="center")
-    t.add_column("ERR",    width=5,  justify="center")
-    t.add_column("Jam",    width=9,  justify="center")
+    t.add_column("Tag",   width=4,  justify="center")
+    t.add_column("API",   width=10)
+    t.add_column("Rnd",   width=4,  justify="center")
+    t.add_column("HTTP",  width=5,  justify="center")
+    t.add_column("Sts",   width=8)
+    t.add_column("✓✗",    width=7,  justify="center")
 
     for api in targets:
         if api["method"] == "all":
@@ -545,17 +539,16 @@ def build_r_live(phone: str, targets: list, stats: dict,
             f"[dim]{rn}[/dim]" if rn > 0 else "[dim]--[/dim]",
             http_tx,
             f"[{col}]{lbl}[/{col}]",
-            ok_txt, err_txt,
-            f"[dim]{ts}[/dim]",
+            f"[green]{ok_c}[/green][dim]/[/dim][red]{err_c}[/red]",
         )
 
     # ── CD bar
     tcd = Table(box=box.SIMPLE, show_header=False, padding=(0, 1),
                 show_lines=False)
-    tcd.add_column("API",  width=14)
-    tcd.add_column("Bar",  width=16)
-    tcd.add_column("Sisa", width=8, justify="right")
-    tcd.add_column("St",   width=8, justify="center")
+    tcd.add_column("API",  width=10)
+    tcd.add_column("Bar",  width=12)
+    tcd.add_column("Sisa", width=6, justify="right")
+    tcd.add_column("St",   width=6, justify="center")
 
     for api in targets:
         if api["method"] == "all":
@@ -565,12 +558,12 @@ def build_r_live(phone: str, targets: list, stats: dict,
         cd   = api["cooldown"]
 
         if rem > 0 and sent:
-            fill = max(0, int((cd - rem) / cd * 14))
-            bar  = f"[bright_cyan]{'━'*fill}[/bright_cyan][dim]{'╌'*(14-fill)}[/dim]"
+            fill = max(0, int((cd - rem) / cd * 10))
+            bar  = f"[bright_cyan]{'━'*fill}[/bright_cyan][dim]{'╌'*(10-fill)}[/dim]"
             sisa = f"[bold red]{fmt_rem(rem):>6}[/bold red]"
             stat = "[red]WAIT[/red]"
         else:
-            bar  = "[bold bright_green]" + "━" * 14 + "[/bold bright_green]"
+            bar  = "[bold bright_green]" + "━" * 10 + "[/bold bright_green]"
             sisa = "[bold green]  0s[/bold green]"
             stat = "[bold green]READY[/bold green]"
 
