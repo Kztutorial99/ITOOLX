@@ -8,6 +8,7 @@ import sys
 import os
 import signal
 import random
+import concurrent.futures
 from datetime import datetime
 
 try:
@@ -44,6 +45,8 @@ APIS = {
     2: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
         "cooldown": 0,  "color": "bold cyan",   "method": "all"},
 }
+
+SALVO_SIZE = 5   # jumlah request serentak di mode Salvo
 
 UA_POOL = [
     "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.165 Mobile Safari/537.36",
@@ -402,12 +405,14 @@ def ask_yrn(before_send: bool = False) -> str:
     before_send=True  → prompt sebelum kirim pertama.
     before_send=False → prompt setelah result + CD selesai.
     Ctrl+C di sini = kembali ke menu (return 'n').
+    Returns: 'y' | 'r' | 's' | 'n'
     """
     flush_stdin()
     if before_send:
         desc = (
             "  [bold cyan]Y[/bold cyan]  Kirim sekali\n"
             "  [bold cyan]R[/bold cyan]  Auto-repeat  (otomatis kirim tiap CD habis)\n"
+            f"  [bold magenta]S[/bold magenta]  Salvo  ({SALVO_SIZE} request serentak)\n"
             "  [bold cyan]N[/bold cyan]  Batal, kembali ke menu"
         )
         title = "[bold cyan]PILIH MODE[/bold cyan]"
@@ -416,6 +421,7 @@ def ask_yrn(before_send: bool = False) -> str:
         desc = (
             "  [bold cyan]Y[/bold cyan]  Kirim sekali lagi\n"
             "  [bold cyan]R[/bold cyan]  Auto-repeat  (otomatis kirim tiap CD habis)\n"
+            f"  [bold magenta]S[/bold magenta]  Salvo  ({SALVO_SIZE} request serentak)\n"
             "  [bold cyan]N[/bold cyan]  Stop, kembali ke menu"
         )
         title = "[bold green]SIAP[/bold green]"
@@ -426,7 +432,7 @@ def ask_yrn(before_send: bool = False) -> str:
         try:
             flush_stdin()
             raw = Prompt.ask("[bold cyan]  >[/bold cyan]", default="y").strip().lower()
-            if raw in ("y", "r", "n"):
+            if raw in ("y", "r", "s", "n"):
                 return raw
         except (KeyboardInterrupt, EOFError):
             return "n"
@@ -573,11 +579,148 @@ def build_r_live(phone: str, targets: list, stats: dict,
                  border_style="yellow", padding=(0, 1))
 
 # ══════════════════════════════════════════════════════════════
+#  SESSION — SINGLE  (S = SALVO mode)
+# ══════════════════════════════════════════════════════════════
+
+def session_single_salvo(api: dict, phone: str):
+    """
+    Isi SALVO_SIZE slot secara visual, lalu tembak semua serentak via thread.
+    Ctrl+C di mana saja → kembali ke menu.
+    """
+    round_n = 0
+    slot_on  = "[bold magenta]●[/bold magenta]"
+    slot_off = "[dim]○[/dim]"
+
+    try:
+        while True:
+            round_n += 1
+
+            # ── Fase 1: isi slot satu per satu
+            clr()
+            try:
+                with Live(console=console, refresh_per_second=20,
+                          transient=True) as live:
+                    for i in range(SALVO_SIZE):
+                        slots    = [slot_on] * (i + 1) + [slot_off] * (SALVO_SIZE - i - 1)
+                        slot_row = "   ".join(slots)
+                        panel = Panel(
+                            f"\n  {slot_row}\n\n"
+                            f"  [dim]Slot [bold white]{i+1}[/bold white]/{SALVO_SIZE} siap[/dim]",
+                            title=(
+                                f"[bold magenta]⚡ SALVO[/bold magenta]  "
+                                f"[{api['color']}]{api['tag']} {api['name']}[/{api['color']}]  "
+                                f"[dim]Round {round_n}[/dim]"
+                            ),
+                            subtitle=(
+                                f"[dim]{phone}   Mengisi antrian...[/dim]"
+                            ),
+                            border_style="magenta", padding=(1, 3),
+                        )
+                        live.update(Align.center(panel))
+                        time.sleep(0.4)
+
+                    # hitung mundur 3 → 1
+                    full_row = "   ".join([slot_on] * SALVO_SIZE)
+                    for cd_i in range(3, 0, -1):
+                        panel = Panel(
+                            f"\n  {full_row}\n\n"
+                            f"  [bold red]FIRE dalam {cd_i}...[/bold red]",
+                            title=(
+                                f"[bold red]⚡ SALVO[/bold red]  "
+                                f"[{api['color']}]{api['tag']} {api['name']}[/{api['color']}]  "
+                                f"[dim]Round {round_n}[/dim]"
+                            ),
+                            subtitle=f"[dim]{phone}   Bersiap...[/dim]",
+                            border_style="red", padding=(1, 3),
+                        )
+                        live.update(Align.center(panel))
+                        time.sleep(0.7)
+            except KeyboardInterrupt:
+                return
+
+            # ── Fase 2: tembak serentak
+            fire_time = datetime.now().strftime("%H:%M:%S")
+            try:
+                with console.status(
+                    f"[bold magenta]⚡ FIRE!  {SALVO_SIZE}× {api['name']}...[/bold magenta]",
+                    spinner="bouncingBall",
+                ):
+                    with concurrent.futures.ThreadPoolExecutor(
+                        max_workers=SALVO_SIZE
+                    ) as ex:
+                        futs    = [ex.submit(dispatch, api["method"], phone)
+                                   for _ in range(SALVO_SIZE)]
+                        results = [f.result()
+                                   for f in concurrent.futures.as_completed(futs)]
+            except KeyboardInterrupt:
+                return
+
+            set_cd(phone, api["method"])
+
+            # ── Fase 3: tampilkan tabel hasil
+            clr()
+            t = Table(
+                title=(
+                    f"[bold magenta]⚡ SALVO  {api['tag']}  "
+                    f"Round {round_n}  {phone}  @ {fire_time}[/bold magenta]"
+                ),
+                box=box.ROUNDED, border_style="magenta",
+                header_style="bold magenta", show_lines=True,
+            )
+            t.add_column("#",       width=4,  justify="center")
+            t.add_column("HTTP",    width=7,  justify="center")
+            t.add_column("Status",  width=12)
+            t.add_column("Preview", width=38)
+
+            ok_count = 0
+            for idx, res in enumerate(results, 1):
+                code = res.get("status", 0)
+                body = res.get("body", "")
+                prev = body[:35].replace("\n", " ") + ("..." if len(body) > 35 else "")
+                lbl, col = status_fmt(code)
+                if is_ok(code):
+                    ok_count += 1
+                t.add_row(
+                    f"[dim]{idx}[/dim]",
+                    f"[{col}]{code}[/{col}]",
+                    f"[{col}]{lbl}[/{col}]",
+                    f"[dim]{prev}[/dim]",
+                )
+
+            console.print(Align.center(t))
+            console.print()
+            console.print(Align.center(
+                f"[bold green]{ok_count} SUCCESS[/bold green]"
+                f"  [bold red]{SALVO_SIZE - ok_count} FAILED[/bold red]"
+            ))
+            console.print()
+
+            # ── tunggu CD lalu tanya ulang
+            try:
+                wait_until_ready(phone, [api])
+            except KeyboardInterrupt:
+                return
+
+            ans = ask_yrn(before_send=False)
+            if ans == "n":
+                return
+            if ans == "r":
+                try:
+                    session_single_r(api, phone, round_n)
+                except KeyboardInterrupt:
+                    pass
+                return
+            # y / s → salvo lagi
+
+    except KeyboardInterrupt:
+        pass  # balik ke menu
+
+# ══════════════════════════════════════════════════════════════
 #  SESSION — SINGLE  (Y mode)
 # ══════════════════════════════════════════════════════════════
 
 def session_single(api: dict, phone: str, first_ans: str):
-    """first_ans sudah diketahui (y atau r) sebelum kirim pertama.
+    """first_ans sudah diketahui (y/r/s) sebelum kirim pertama.
     Ctrl+C di mana saja di dalam sini → kembali ke menu utama."""
     round_n = 0
 
@@ -586,6 +729,10 @@ def session_single(api: dict, phone: str, first_ans: str):
             session_single_r(api, phone, round_n)
         except KeyboardInterrupt:
             pass
+        return
+
+    if first_ans == "s":
+        session_single_salvo(api, phone)
         return
 
     # Y mode
@@ -607,6 +754,9 @@ def session_single(api: dict, phone: str, first_ans: str):
                 return
             if ans == "r":
                 session_single_r(api, phone, round_n)
+                return
+            if ans == "s":
+                session_single_salvo(api, phone)
                 return
     except KeyboardInterrupt:
         pass  # balik ke menu
