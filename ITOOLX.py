@@ -1,40 +1,41 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import requests
-import json
-import time
 import sys
 import os
-import signal
-import random
-import re
-import concurrent.futures
-from datetime import datetime
 
+# ── Cek dependency sebelum import apapun ──────────────────────
+_MISSING = []
 try:
-    from tabulate import tabulate
+    import requests
+except ImportError:
+    _MISSING.append("requests")
+try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
     from rich.prompt import Prompt
-    from rich.align import Align
     from rich.live import Live
     from rich import box
     from rich.rule import Rule
     from rich.text import Text
 except ImportError:
-    os.system("pip install rich tabulate -q")
-    from tabulate import tabulate
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.table import Table
-    from rich.prompt import Prompt
-    from rich.align import Align
-    from rich.live import Live
-    from rich import box
-    from rich.rule import Rule
-    from rich.text import Text
+    _MISSING.append("rich")
+
+if _MISSING:
+    print(f"\n[ERROR] Paket berikut belum terpasang: {', '.join(_MISSING)}")
+    print("Jalankan dulu:")
+    print("  pip install requests rich")
+    print("  (atau: pip3 install requests rich)\n")
+    sys.exit(1)
+
+import json
+import time
+import signal
+import random
+import re
+import concurrent.futures
+from datetime import datetime
 
 console = Console(highlight=False)
 
@@ -113,7 +114,6 @@ def _banner() -> Text:
     t.append(pad + "─" * len(sub) + "\n", "color(238)")
     return t
 
-BANNER = None  # digenerate tiap print_home via _banner()
 
 # ══════════════════════════════════════════════════════════════
 #  STATE
@@ -175,11 +175,15 @@ def _bar_full() -> str:
     return f"[bold color(46)]{'━' * w}[/bold color(46)]"
 
 def validate_phone(raw: str) -> str:
-    p = raw.strip().replace(" ", "").replace("-", "")
-    if p.startswith("+62"): return "62" + p[3:]
-    if p.startswith("08"):  return "628" + p[2:]
-    if p.startswith("8"):   return "62" + p
+    p = raw.strip().replace(" ", "").replace("-", "").replace("+", "")
+    if p.startswith("62"):  pass
+    elif p.startswith("08"): p = "628" + p[2:]
+    elif p.startswith("8"):  p = "62" + p
     return p
+
+def is_valid_phone(p: str) -> bool:
+    """Cek format: 62 + 8-13 digit angka (total 10-15 char)."""
+    return bool(re.match(r'^62\d{8,13}$', p))
 
 def status_fmt(code: int):
     if is_ok(code):  return "SUCCESS", "bold green"
@@ -271,8 +275,12 @@ def safe_post(url: str, headers: dict, data=None, files=None,
 
             # 429 → baca Retry-After, tunggu, lalu retry
             if r.status_code == 429:
-                wait = float(r.headers.get("Retry-After",
-                             random.uniform(2, 5) * (attempt + 1)))
+                try:
+                    wait = float(r.headers.get("Retry-After", 0) or 0)
+                    if wait <= 0:
+                        raise ValueError
+                except (ValueError, TypeError):
+                    wait = random.uniform(2, 5) * (attempt + 1)
                 time.sleep(min(wait, 12))
                 continue
 
@@ -336,9 +344,9 @@ def render_menu(phone: str = "") -> Table:
     )
     t.add_column("No",  ratio=1,  justify="center", style="bold color(51)")
     t.add_column("Tag", ratio=2,  justify="center")
-    t.add_column("Nama API", ratio=6)
+    t.add_column("Nama API", ratio=6, no_wrap=True)
     t.add_column("Via", ratio=4,  style="dim")
-    t.add_column("CD",  ratio=2,  justify="right")
+    t.add_column("CD",  ratio=2,  justify="right", no_wrap=True)
 
     for num, api in APIS.items():
         cd_txt = "[dim]each[/dim]" if api["method"] == "all" else f"[color(226)]{api['cooldown']}s[/color(226)]"
@@ -487,7 +495,7 @@ def show_result(api: dict, phone: str, res: dict, round_n: int):
     t = Table(box=box.SIMPLE, show_header=False, padding=(0, 1),
               expand=True, show_lines=False)
     t.add_column("key",   ratio=2, style="bold color(245)")
-    t.add_column("value", ratio=8)
+    t.add_column("value", ratio=8, no_wrap=False)
 
     t.add_row("API",    f"[bold {api['color']}]{api['tag']}  {api['name']}[/bold {api['color']}]")
     t.add_row("Nomor",  f"[bold color(226)]{phone}[/bold color(226)]")
@@ -644,7 +652,8 @@ def session_single(api: dict, phone: str, first_ans: str):
                 f"[bold cyan]Mengirim  {api['name']}...", spinner="dots",
             ):
                 res = dispatch(api["method"], phone)
-            set_cd(phone, api["method"])
+            if is_ok(res.get("status", 0)):
+                set_cd(phone, api["method"])
 
             show_result(api, phone, res, round_n)
 
@@ -681,7 +690,8 @@ def session_single_r(api: dict, phone: str, start_round: int):
                     f"[bold cyan]Auto  {api['name']}  #{rn}...", spinner="dots",
                 ):
                     res = dispatch(api["method"], phone)
-                set_cd(phone, api["method"])
+                if is_ok(res.get("status", 0)):
+                    set_cd(phone, api["method"])
                 live.start()
 
                 code = res.get("status", 0)
@@ -730,7 +740,8 @@ def session_all(phone: str, first_ans: str):
                 ):
                     t_str = datetime.now().strftime("%H:%M:%S")
                     res   = dispatch(api["method"], phone)
-                    set_cd(phone, api["method"])
+                    if is_ok(res.get("status", 0)):
+                        set_cd(phone, api["method"])
                 results.append({
                     "name":   api["name"], "tag": api["tag"],
                     "color":  api["color"],
@@ -785,7 +796,8 @@ def session_all_r(phone: str, targets: list, initial_round: int = 0):
                         f"[bold cyan]->  {api['name']}  #{rn}", spinner="dots",
                     ):
                         res = dispatch(api["method"], phone)
-                    set_cd(phone, api["method"])
+                    if is_ok(res.get("status", 0)):
+                        set_cd(phone, api["method"])
                     live.start()
 
                     code = res.get("status", 0)
@@ -819,9 +831,9 @@ def ask_phone(current: str = "") -> str:
         if raw.strip() == "" and current:
             return current
         p = validate_phone(raw)
-        if len(p) >= 10:
+        if is_valid_phone(p):
             return p
-        console.print("[bold red]  Nomor tidak valid.[/bold red]")
+        console.print("[bold color(196)]  ✗ Format salah. Contoh: 08123456789 atau 628123456789[/bold color(196)]")
 
 # ══════════════════════════════════════════════════════════════
 #  MAIN
