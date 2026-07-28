@@ -39,6 +39,18 @@ from datetime import datetime
 
 console = Console(highlight=False)
 
+# ── Auto-resize: update COLUMNS/LINES env tiap terminal di-resize ─────────────
+def _on_resize(signum, frame):
+    try:
+        sz = os.get_terminal_size()
+        os.environ["COLUMNS"] = str(sz.columns)
+        os.environ["LINES"]   = str(sz.lines)
+    except Exception:
+        pass
+
+if hasattr(signal, "SIGWINCH"):
+    signal.signal(signal.SIGWINCH, _on_resize)
+
 # ══════════════════════════════════════════════════════════════
 #  CONFIG
 # ══════════════════════════════════════════════════════════════
@@ -154,7 +166,21 @@ def flush_stdin():
 
 
 def sanitize_preview(text: str, maxlen: int = 80) -> str:
-    """Buang karakter non-printable & escape Rich markup bracket."""
+    """Coba parse JSON → ambil field pesan, fallback ke ASCII printable."""
+    # coba parse JSON dulu → tampilkan field yang bermakna
+    try:
+        j = json.loads(text)
+        for key in ("message", "msg", "error", "detail", "status", "data", "info"):
+            if key in j:
+                v = j[key]
+                if isinstance(v, str) and v.strip():
+                    text = v
+                    break
+        else:
+            # tidak ada field teks tunggal → dump compact
+            text = json.dumps(j, ensure_ascii=True, separators=(",", ":"))
+    except Exception:
+        pass
     text = re.sub(r"[^\x20-\x7E\n]", "", text)   # hanya ASCII printable
     text = text.replace("[", "\\[")                   # escape Rich markup
     text = text.replace("\n", " ").strip()
@@ -679,6 +705,7 @@ def session_single_r(api: dict, phone: str, start_round: int):
     last_row     = {}
     title        = f"[bold yellow]AUTO-REPEAT  {api['tag']}  {phone}[/bold yellow]"
 
+    clr()   # bersihkan sisa tampilan Y-mode sebelum Live dimulai
     try:
         with Live(console=console, refresh_per_second=4, transient=True) as live:
             while True:
@@ -686,6 +713,7 @@ def session_single_r(api: dict, phone: str, start_round: int):
                 round_counts[api["method"]] = rn
 
                 live.stop()
+                clr()   # bersihkan residue spinner agar header tidak double
                 with console.status(
                     f"[bold cyan]Auto  {api['name']}  #{rn}...", spinner="dots",
                 ):
@@ -781,6 +809,7 @@ def session_all_r(phone: str, targets: list, initial_round: int = 0):
         return (was_sent(phone, api["method"]) and
                 get_rem(phone, api["method"], api["cooldown"]) == 0)
 
+    clr()   # bersihkan sisa tampilan Y-mode sebelum Live dimulai
     with Live(console=console, refresh_per_second=4, transient=True) as live:
         while True:
             ready = [a for a in targets if needs_send(a)]
@@ -792,6 +821,7 @@ def session_all_r(phone: str, targets: list, initial_round: int = 0):
                     rn = round_counts[api["method"]]
 
                     live.stop()
+                    clr()   # bersihkan residue spinner agar header tidak double
                     with console.status(
                         f"[bold cyan]->  {api['name']}  #{rn}", spinner="dots",
                     ):
