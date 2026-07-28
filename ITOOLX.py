@@ -391,7 +391,7 @@ def render_menu(phone: str = "") -> Table:
         box=box.ROUNDED, border_style="color(239)",
         header_style="bold color(51) on color(235)",
         show_lines=True, padding=(0, 1),
-        expand=True, overflow="fold",
+        expand=True,
     )
 
     if w >= 110:
@@ -466,7 +466,7 @@ def build_cd_panel(phone: str, targets: list, title: str = "") -> Panel:
 
     t = Table(box=box.SIMPLE_HEAD, show_header=True, show_lines=False,
               padding=(0, 1), header_style="bold color(226) on color(235)",
-              expand=True, overflow="fold")
+              expand=True)
 
     if w >= 90:
         # Desktop / Compact lebar: API | Progress bar | Sisa | Status
@@ -577,7 +577,7 @@ def show_result(api: dict, phone: str, res: dict, round_n: int):
 
     if w >= 60:
         t = Table(box=box.SIMPLE, show_header=False, padding=(0, 1),
-                  expand=True, show_lines=False, overflow="fold")
+                  expand=True, show_lines=False)
         t.add_column("key",   ratio=2, style="bold color(245)")
         t.add_column("value", ratio=8, overflow="fold")
         t.add_row("API",   f"[bold {api['color']}]{api['tag']}  {api['name']}[/bold {api['color']}]")
@@ -606,7 +606,7 @@ def show_all_results(phone: str, results: list, round_n: int):
 
     t = Table(title=title, box=box.ROUNDED, border_style="color(239)",
               header_style="bold color(51) on color(235)",
-              show_lines=True, padding=(0, 1), expand=True, overflow="fold")
+              show_lines=True, padding=(0, 1), expand=True)
 
     if w >= 100:
         # Desktop: Tag | API | HTTP | Status | Jam
@@ -669,7 +669,7 @@ def build_r_live(phone: str, targets: list, stats: dict,
     # ── Tabel hasil — kolom collapse sesuai lebar
     t = Table(box=box.ROUNDED, border_style="color(239)",
               header_style="bold color(51) on color(235)",
-              show_lines=True, padding=(0, 1), expand=True, overflow="fold")
+              show_lines=True, padding=(0, 1), expand=True)
 
     if w >= 100:
         t.add_column("Tag",    ratio=2, justify="center")
@@ -734,7 +734,7 @@ def build_r_live(phone: str, targets: list, stats: dict,
     # ── CD bar — hanya tampil jika terminal cukup lebar
     if w >= 70:
         tcd = Table(box=box.SIMPLE, show_header=False, padding=(0, 1),
-                    show_lines=False, expand=True, overflow="fold")
+                    show_lines=False, expand=True)
         if w >= 90:
             tcd.add_column("API",  ratio=4, overflow="fold")
             tcd.add_column("Bar",  ratio=5)
