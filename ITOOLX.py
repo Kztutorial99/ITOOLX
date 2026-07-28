@@ -405,14 +405,15 @@ def ask_yrn(before_send: bool = False) -> str:
     before_send=True  → prompt sebelum kirim pertama.
     before_send=False → prompt setelah result + CD selesai.
     Ctrl+C di sini = kembali ke menu (return 'n').
-    Returns: 'y' | 'r' | 's' | 'n'
+    Returns: 'y' | 'r' | 's' | 'c' | 'n'
     """
     flush_stdin()
     if before_send:
         desc = (
             "  [bold cyan]Y[/bold cyan]  Kirim sekali\n"
             "  [bold cyan]R[/bold cyan]  Auto-repeat  (otomatis kirim tiap CD habis)\n"
-            f"  [bold magenta]S[/bold magenta]  Salvo  ({SALVO_SIZE} request serentak)\n"
+            f"  [bold magenta]S[/bold magenta]  Salvo  ({SALVO_SIZE} tembak serentak)\n"
+            f"  [bold yellow]C[/bold yellow]  Charge  (charge {SALVO_SIZE} slot → sync semua → tembak barengan)\n"
             "  [bold cyan]N[/bold cyan]  Batal, kembali ke menu"
         )
         title = "[bold cyan]PILIH MODE[/bold cyan]"
@@ -421,7 +422,8 @@ def ask_yrn(before_send: bool = False) -> str:
         desc = (
             "  [bold cyan]Y[/bold cyan]  Kirim sekali lagi\n"
             "  [bold cyan]R[/bold cyan]  Auto-repeat  (otomatis kirim tiap CD habis)\n"
-            f"  [bold magenta]S[/bold magenta]  Salvo  ({SALVO_SIZE} request serentak)\n"
+            f"  [bold magenta]S[/bold magenta]  Salvo  ({SALVO_SIZE} tembak serentak)\n"
+            f"  [bold yellow]C[/bold yellow]  Charge  (charge {SALVO_SIZE} slot → sync semua → tembak barengan)\n"
             "  [bold cyan]N[/bold cyan]  Stop, kembali ke menu"
         )
         title = "[bold green]SIAP[/bold green]"
@@ -432,7 +434,7 @@ def ask_yrn(before_send: bool = False) -> str:
         try:
             flush_stdin()
             raw = Prompt.ask("[bold cyan]  >[/bold cyan]", default="y").strip().lower()
-            if raw in ("y", "r", "s", "n"):
+            if raw in ("y", "r", "s", "c", "n"):
                 return raw
         except (KeyboardInterrupt, EOFError):
             return "n"
@@ -579,6 +581,240 @@ def build_r_live(phone: str, targets: list, stats: dict,
                  border_style="yellow", padding=(0, 1))
 
 # ══════════════════════════════════════════════════════════════
+#  CHARGE MODE — per-slot CD panel builder
+# ══════════════════════════════════════════════════════════════
+
+def _build_charge_panel(api: dict, phone: str, slot_times: list,
+                         cd: int, round_n: int, phase: str,
+                         fire_in: int = None,
+                         charging_slot: int = None) -> Panel:
+    """Panel live Charge mode: per-slot progress bar + status."""
+    t = Table(box=box.SIMPLE, show_header=True, padding=(0, 1),
+              header_style="dim", show_lines=False)
+    t.add_column("Slot",     width=6,  justify="center")
+    t.add_column("Progress", width=16)
+    t.add_column("Sisa",     width=8,  justify="right")
+    t.add_column("Unlock",   width=9,  justify="center")
+    t.add_column("Status",   width=10, justify="center")
+
+    now = time.time()
+    for i, sent_at in enumerate(slot_times):
+        lbl = f"[{api['color']}]#{i+1}[/{api['color']}]"
+        if sent_at is None:
+            if charging_slot == i:
+                t.add_row(lbl,
+                          "[bold yellow]" + "~" * 14 + "[/bold yellow]",
+                          "[bold yellow] ...[/bold yellow]",
+                          "[dim]--[/dim]",
+                          "[bold yellow]CHARGE[/bold yellow]")
+            else:
+                t.add_row(lbl,
+                          "[dim]" + "·" * 14 + "[/dim]",
+                          "[dim]--[/dim]", "[dim]--[/dim]",
+                          "[dim]IDLE[/dim]")
+            continue
+
+        rem = max(0.0, cd - (now - sent_at))
+        if rem > 0:
+            fill = max(0, int((cd - rem) / cd * 14))
+            bar  = f"[yellow]{'|'*fill}[/yellow][dim]{'.'*(14-fill)}[/dim]"
+            sisa = f"[bold yellow]{fmt_rem(int(rem)):>6}[/bold yellow]"
+            ul   = datetime.fromtimestamp(sent_at + cd).strftime("%H:%M:%S")
+            stat = "[yellow]WAIT[/yellow]"
+        else:
+            bar  = "[bold green]" + "|" * 14 + "[/bold green]"
+            sisa = "[bold green]  0s[/bold green]"
+            ul   = "[dim]  --  [/dim]"
+            stat = "[bold green]READY[/bold green]"
+
+        t.add_row(lbl, bar, sisa, f"[dim]{ul}[/dim]", stat)
+
+    tag_txt = f"[{api['color']}]{api['tag']} {api['name']}[/{api['color']}]"
+    if phase == "charge":
+        title  = f"[bold yellow]⚡ CHARGE[/bold yellow]  {tag_txt}  [dim]Round {round_n}[/dim]"
+        sub    = "[dim]Mengisi slot...[/dim]"
+        border = "yellow"
+    elif phase == "wait":
+        title  = f"[bold yellow]⚡ CHARGE[/bold yellow]  {tag_txt}  [dim]Round {round_n}[/dim]"
+        sub    = "[dim]Menunggu semua slot READY...[/dim]"
+        border = "yellow"
+    elif phase == "hold":
+        fi_txt = f"  [bold red]FIRE dalam {fire_in}...[/bold red]" if fire_in else ""
+        title  = f"[bold green]⚡ CHARGE[/bold green]  {tag_txt}  [dim]Round {round_n}[/dim]"
+        sub    = f"[bold green]SEMUA READY[/bold green]{fi_txt}"
+        border = "green"
+    else:                                                    # fire
+        title  = f"[bold red]⚡ CHARGE FIRE![/bold red]  {tag_txt}  [dim]Round {round_n}[/dim]"
+        sub    = "[bold red]FIRING...[/bold red]"
+        border = "red"
+
+    ts = datetime.now().strftime("%H:%M:%S")
+    return Panel(t, title=title,
+                 subtitle=f"[dim]{ts}   {phone}   Ctrl+C = menu[/dim]\n{sub}",
+                 border_style=border, padding=(0, 1))
+
+# ══════════════════════════════════════════════════════════════
+#  SESSION — SINGLE  (C = CHARGE mode)
+# ══════════════════════════════════════════════════════════════
+
+def session_single_charge(api: dict, phone: str):
+    """
+    Charge mode — alur:
+      1. Charge:  Fire slot 1..N satu-satu (jeda kecil antar slot).
+                  Setiap slot punya CD timer sendiri (slot_times[i]).
+      2. Wait:    Live panel per-slot CD → tahan semua sampai LAST slot READY.
+      3. Hold:    Countdown 3s (semua READY) → tembak semua serentak.
+      4. Repeat fase 2 (slot_times sudah terisi dari fire sebelumnya).
+    Ctrl+C di mana saja → kembali ke menu.
+    """
+    n          = SALVO_SIZE
+    cd         = api["cooldown"]
+    slot_times = [None] * n        # per-slot sent_at (float), bukan global tracker
+    round_n    = 0
+    total_ok   = 0
+    total_err  = 0
+
+    try:
+        while True:
+            # ── Fase 1: Charge (hanya saat slot belum pernah di-fire)
+            idle = [i for i, t in enumerate(slot_times) if t is None]
+            if idle:
+                clr()
+                try:
+                    with Live(console=console, refresh_per_second=8,
+                              transient=True) as live:
+                        for i in idle:
+                            live.update(Align.center(
+                                _build_charge_panel(api, phone, slot_times,
+                                                    cd, round_n + 1,
+                                                    "charge",
+                                                    charging_slot=i)))
+                            # fire slot ini
+                            dispatch(api["method"], phone)
+                            slot_times[i] = time.time()
+                            live.update(Align.center(
+                                _build_charge_panel(api, phone, slot_times,
+                                                    cd, round_n + 1,
+                                                    "charge")))
+                            if i < n - 1:
+                                time.sleep(random.uniform(0.6, 1.4))
+                except KeyboardInterrupt:
+                    return
+
+            round_n += 1
+
+            # ── Fase 2: Tunggu semua slot CD habis
+            try:
+                with Live(console=console, refresh_per_second=4,
+                          transient=True) as live:
+                    while True:
+                        now_t = time.time()
+                        rems  = [max(0.0, cd - (now_t - t))
+                                 for t in slot_times]
+                        if all(r == 0.0 for r in rems):
+                            break
+                        live.update(Align.center(
+                            _build_charge_panel(api, phone, slot_times,
+                                                cd, round_n, "wait")))
+                        time.sleep(0.25)
+
+                    # ── Fase 3: Countdown → hold semua
+                    for fi in range(3, 0, -1):
+                        live.update(Align.center(
+                            _build_charge_panel(api, phone, slot_times,
+                                                cd, round_n, "hold",
+                                                fire_in=fi)))
+                        time.sleep(0.8)
+
+                    live.update(Align.center(
+                        _build_charge_panel(api, phone, slot_times,
+                                            cd, round_n, "fire")))
+            except KeyboardInterrupt:
+                return
+
+            # ── Fase 4: FIRE serentak via threads
+            fire_time = datetime.now().strftime("%H:%M:%S")
+            try:
+                with console.status(
+                    f"[bold red]⚡ CHARGE FIRE!  {n}× {api['name']}...[/bold red]",
+                    spinner="bouncingBall",
+                ):
+                    with concurrent.futures.ThreadPoolExecutor(
+                        max_workers=n
+                    ) as ex:
+                        futs    = [ex.submit(dispatch, api["method"], phone)
+                                   for _ in range(n)]
+                        results = [f.result()
+                                   for f in concurrent.futures.as_completed(futs)]
+            except KeyboardInterrupt:
+                return
+
+            # Update semua slot_times ke waktu fire (next round CD mulai dari sini)
+            now_fire   = time.time()
+            slot_times = [now_fire] * n
+            # Sync ke global cooldown tracker juga (biar CD panel utama juga benar)
+            set_cd(phone, api["method"])
+
+            # ── Tampilkan hasil
+            clr()
+            tbl = Table(
+                title=(
+                    f"[bold yellow]⚡ CHARGE  {api['tag']}  "
+                    f"Round {round_n}  {phone}  @ {fire_time}[/bold yellow]"
+                ),
+                box=box.ROUNDED, border_style="yellow",
+                header_style="bold yellow", show_lines=True,
+            )
+            tbl.add_column("#",       width=4,  justify="center")
+            tbl.add_column("HTTP",    width=7,  justify="center")
+            tbl.add_column("Status",  width=12)
+            tbl.add_column("Preview", width=38)
+
+            ok_round = 0
+            for idx, res in enumerate(results, 1):
+                code = res.get("status", 0)
+                body = res.get("body", "")
+                prev = body[:35].replace("\n", " ") + ("..." if len(body) > 35 else "")
+                lbl, col = status_fmt(code)
+                if is_ok(code):
+                    ok_round += 1
+                    total_ok += 1
+                else:
+                    total_err += 1
+                tbl.add_row(
+                    f"[dim]{idx}[/dim]",
+                    f"[{col}]{code}[/{col}]",
+                    f"[{col}]{lbl}[/{col}]",
+                    f"[dim]{prev}[/dim]",
+                )
+
+            console.print(Align.center(tbl))
+            console.print()
+            console.print(Align.center(
+                f"[bold green]{ok_round} SUCCESS[/bold green]"
+                f"  [bold red]{n - ok_round} FAILED[/bold red]"
+                f"  [dim]│  Total: {total_ok}✓  {total_err}✗[/dim]"
+            ))
+            console.print()
+
+            ans = ask_yrn(before_send=False)
+            if ans == "n":
+                return
+            if ans == "r":
+                try:
+                    session_single_r(api, phone, round_n)
+                except KeyboardInterrupt:
+                    pass
+                return
+            if ans == "s":
+                session_single_salvo(api, phone)
+                return
+            # y / c → charge lagi (slot_times terisi, langsung ke fase 2)
+
+    except KeyboardInterrupt:
+        pass  # balik ke menu
+
+# ══════════════════════════════════════════════════════════════
 #  SESSION — SINGLE  (S = SALVO mode)
 # ══════════════════════════════════════════════════════════════
 
@@ -720,7 +956,7 @@ def session_single_salvo(api: dict, phone: str):
 # ══════════════════════════════════════════════════════════════
 
 def session_single(api: dict, phone: str, first_ans: str):
-    """first_ans sudah diketahui (y/r/s) sebelum kirim pertama.
+    """first_ans sudah diketahui (y/r/s/c) sebelum kirim pertama.
     Ctrl+C di mana saja di dalam sini → kembali ke menu utama."""
     round_n = 0
 
@@ -733,6 +969,10 @@ def session_single(api: dict, phone: str, first_ans: str):
 
     if first_ans == "s":
         session_single_salvo(api, phone)
+        return
+
+    if first_ans == "c":
+        session_single_charge(api, phone)
         return
 
     # Y mode
@@ -757,6 +997,9 @@ def session_single(api: dict, phone: str, first_ans: str):
                 return
             if ans == "s":
                 session_single_salvo(api, phone)
+                return
+            if ans == "c":
+                session_single_charge(api, phone)
                 return
     except KeyboardInterrupt:
         pass  # balik ke menu
