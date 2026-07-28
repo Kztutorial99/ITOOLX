@@ -94,12 +94,15 @@ def rand_sec_ch(ver: int = None) -> str:
     return random.choice(SEC_CH_BRANDS).replace("{v}", str(v))
 
 BANNER = """\
-[bold cyan] ██╗████████╗ ██████╗  ██████╗ ██╗     ██╗  ██╗
- ██║╚══██╔══╝██╔═══██╗██╔═══██╗██║     ╚██╗██╔╝
- ██║   ██║   ██║   ██║██║   ██║██║      ╚███╔╝ 
- ██║   ██║   ██║   ██║██║   ██║██║      ██╔██╗ 
- ██║   ██║   ╚██████╔╝╚██████╔╝███████╗██╔╝ ██╗
- ╚═╝   ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝[/bold cyan]"""
+[bold bright_cyan]  ╔══════════════════════════════════════╗[/bold bright_cyan]
+[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]██╗[/bold white] [cyan]████████╗[/cyan][white]██████╗ [/white][bright_blue] ██╗     ██╗  ██╗[/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
+[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]██║[/bold white] [cyan]╚══██╔══╝[/cyan][white]██╔═══██╗[/white][bright_blue]██║     ╚██╗██╔╝[/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
+[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]██║[/bold white] [cyan]   ██║  [/cyan][white]██║   ██║[/white][bright_blue]██║      ╚███╔╝ [/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
+[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]██║[/bold white] [cyan]   ██║  [/cyan][white]██║   ██║[/white][bright_blue]██║      ██╔██╗ [/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
+[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]██║[/bold white] [cyan]   ██║  [/cyan][white]╚██████╔╝[/white][bright_blue]███████╗██╔╝ ██╗[/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
+[bold bright_cyan]  ║[/bold bright_cyan]  [bold white]╚═╝[/bold white] [cyan]   ╚═╝  [/cyan][white] ╚═════╝ [/white][bright_blue]╚══════╝╚═╝  ╚═╝[/bright_blue]  [bold bright_cyan]║[/bold bright_cyan]
+[bold bright_cyan]  ╚══════════════════════════════════════╝[/bold bright_cyan]
+  [dim]       Multi-API OTP Sender  •  Termux Edition[/dim]"""
 
 # ══════════════════════════════════════════════════════════════
 #  STATE
@@ -138,6 +141,14 @@ def flush_stdin():
     except Exception:
         pass
 
+
+def sanitize_preview(text: str, maxlen: int = 80) -> str:
+    """Buang karakter non-printable & escape Rich markup bracket."""
+    text = re.sub(r"[^\x20-\x7E\n]", "", text)   # hanya ASCII printable
+    text = text.replace("[", "\[")                    # escape Rich markup
+    text = text.replace("\n", " ").strip()
+    return (text[:maxlen] + "...") if len(text) > maxlen else text
+
 def validate_phone(raw: str) -> str:
     p = raw.strip().replace(" ", "").replace("-", "")
     if p.startswith("+62"): return "62" + p[3:]
@@ -153,9 +164,10 @@ def status_fmt(code: int):
 def clean_exit():
     clr()
     console.print(Align.center(Panel(
-        "[bold white]Sampai jumpa.[/bold white]\n"
-        "[dim]ITOOLX  Termux Edition[/dim]",
-        border_style="cyan", padding=(1, 4),
+        "[bold bright_white]  Sampai jumpa!  [/bold bright_white]\n"
+        "[dim]  ITOOLX  •  Termux Edition  [/dim]",
+        border_style="bright_cyan", padding=(1, 6),
+        title="[bright_cyan]  👋  [/bright_cyan]",
     )))
     sys.exit(0)
 
@@ -293,8 +305,8 @@ def render_menu(phone: str = "") -> Table:
             "[bold cyan]PILIH TARGET[/bold cyan]"
             + (f"  [dim]-> {phone}[/dim]" if phone else "")
         ),
-        box=box.DOUBLE_EDGE, border_style="cyan",
-        header_style="bold cyan", show_lines=True,
+        box=box.HEAVY_HEAD, border_style="bright_cyan",
+        header_style="bold bright_white on dark_cyan", show_lines=True,
     )
     t.add_column("No",  width=4,  justify="center", style="bold white")
     t.add_column("Tag", width=5,  justify="center")
@@ -317,11 +329,6 @@ def render_menu(phone: str = "") -> Table:
 def print_home(phone: str = ""):
     clr()
     console.print(Align.center(BANNER))
-    console.print(Align.center(Panel(
-        "[bold white]Multi-API OTP Sender[/bold white]  "
-        "[dim]by[/dim] [bold cyan]ITOOLX[/bold cyan]  [dim]Termux Edition[/dim]",
-        border_style="cyan", padding=(0, 3),
-    )))
     console.print()
     console.print(Align.center(render_menu(phone)))
     console.print()
@@ -332,8 +339,8 @@ def print_home(phone: str = ""):
 
 def build_cd_panel(phone: str, targets: list, title: str = "") -> Panel:
     t = Table(
-        box=box.SIMPLE, show_header=True, show_lines=False,
-        padding=(0, 1), header_style="dim",
+        box=box.SIMPLE_HEAD, show_header=True, show_lines=False,
+        padding=(0, 1), header_style="bold bright_white",
     )
     t.add_column("API",      width=16)
     t.add_column("Progress", width=16)
@@ -350,12 +357,12 @@ def build_cd_panel(phone: str, targets: list, title: str = "") -> Panel:
 
         if rem > 0 and sent:
             fill  = max(0, int((cd - rem) / cd * 14))
-            bar   = f"[cyan]{'|'*fill}[/cyan][dim]{'.'*(14-fill)}[/dim]"
+            bar   = f"[bright_cyan]{'━'*fill}[/bright_cyan][dim]{'╌'*(14-fill)}[/dim]"
             sisa  = f"[bold red]{fmt_rem(rem):>6}[/bold red]"
             ul    = datetime.fromtimestamp(sent + cd).strftime("%H:%M:%S")
             stat  = "[red] WAIT [/red]"
         else:
-            bar   = "[bold green]" + "|" * 14 + "[/bold green]"
+            bar   = "[bold bright_green]" + "━" * 14 + "[/bold bright_green]"
             sisa  = "[bold green]  0s[/bold green]"
             ul    = "[dim]  --   [/dim]"
             stat  = "[bold green] READY [/bold green]"
@@ -442,18 +449,22 @@ def show_result(api: dict, phone: str, res: dict, round_n: int):
     clr()
     code      = res.get("status", 0)
     body      = res.get("body", "")
-    prev      = body[:100].replace("\n", " ") + ("..." if len(body) > 100 else "")
+    prev      = sanitize_preview(body, 80)
     lbl, col  = status_fmt(code)
 
+    icon   = "✅" if is_ok(code) else "❌"
+    h_line = "[bright_cyan]" + "─" * 36 + "[/bright_cyan]"
     console.print(Align.center(Panel(
-        f"  [{api['color']}]{api['tag']}  {api['name']}[/{api['color']}]\n\n"
-        f"  [bold white]Nomor  [/bold white] [bright_yellow]{phone}[/bright_yellow]\n"
-        f"  [bold white]Round  [/bold white] {round_n}\n"
-        f"  [bold white]HTTP   [/bold white] [{col}]{code}   {lbl}[/{col}]\n"
-        f"  [bold white]Waktu  [/bold white] [dim]{datetime.now().strftime('%H:%M:%S')}[/dim]\n\n"
+        f"  {h_line}\n"
+        f"  [bold bright_white]▸ API   [/bold bright_white][{api['color']}]{api['tag']}  {api['name']}[/{api['color']}]\n"
+        f"  [bold bright_white]▸ Nomor [/bold bright_white][bright_yellow]{phone}[/bright_yellow]\n"
+        f"  [bold bright_white]▸ Round [/bold bright_white][dim]{round_n}[/dim]\n"
+        f"  [bold bright_white]▸ HTTP  [/bold bright_white][{col}]{code}[/{col}]   [{col}]{lbl}[/{col}]\n"
+        f"  [bold bright_white]▸ Waktu [/bold bright_white][dim]{datetime.now().strftime('%H:%M:%S')}[/dim]\n"
+        f"  {h_line}\n"
         f"  [dim]{prev}[/dim]",
-        title=f"[{col}] {lbl} [/{col}]",
-        border_style="green" if is_ok(code) else "red",
+        title=f" {icon}  [{col}]{lbl}[/{col}] ",
+        border_style="bright_green" if is_ok(code) else "bright_red",
         padding=(1, 2),
     )))
     console.print()
@@ -463,8 +474,8 @@ def show_all_results(phone: str, results: list, round_n: int):
     clr()
     t = Table(
         title=f"[bold cyan]ALL TARGETS   Round {round_n}   {phone}[/bold cyan]",
-        box=box.ROUNDED, border_style="cyan",
-        header_style="bold cyan", show_lines=True,
+        box=box.HEAVY_HEAD, border_style="bright_cyan",
+        header_style="bold bright_white on dark_cyan", show_lines=True,
     )
     t.add_column("Tag",    width=5,  justify="center")
     t.add_column("API",    width=16)
@@ -555,11 +566,11 @@ def build_r_live(phone: str, targets: list, stats: dict,
 
         if rem > 0 and sent:
             fill = max(0, int((cd - rem) / cd * 14))
-            bar  = f"[cyan]{'|'*fill}[/cyan][dim]{'.'*(14-fill)}[/dim]"
+            bar  = f"[bright_cyan]{'━'*fill}[/bright_cyan][dim]{'╌'*(14-fill)}[/dim]"
             sisa = f"[bold red]{fmt_rem(rem):>6}[/bold red]"
             stat = "[red]WAIT[/red]"
         else:
-            bar  = "[bold green]" + "|" * 14 + "[/bold green]"
+            bar  = "[bold bright_green]" + "━" * 14 + "[/bold bright_green]"
             sisa = "[bold green]  0s[/bold green]"
             stat = "[bold green]READY[/bold green]"
 
