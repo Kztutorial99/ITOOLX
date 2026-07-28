@@ -8,10 +8,12 @@ import sys
 import os
 import signal
 import random
+import re
 import concurrent.futures
 from datetime import datetime
 
 try:
+    from tabulate import tabulate
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
@@ -22,7 +24,8 @@ try:
     from rich.rule import Rule
     from rich.text import Text
 except ImportError:
-    os.system("pip install rich -q")
+    os.system("pip install rich tabulate -q")
+    from tabulate import tabulate
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
