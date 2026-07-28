@@ -37,14 +37,27 @@ import re
 import concurrent.futures
 from datetime import datetime
 
-console = Console(highlight=False)
-
-# ── Auto-resize: update COLUMNS/LINES env tiap terminal di-resize ─────────────
-def _on_resize(signum, frame):
+def _make_console() -> Console:
+    """Buat Console yang selalu baca ukuran terminal secara dinamis."""
     try:
         sz = os.get_terminal_size()
         os.environ["COLUMNS"] = str(sz.columns)
         os.environ["LINES"]   = str(sz.lines)
+    except Exception:
+        pass
+    return Console(highlight=False, force_terminal=True)
+
+console = _make_console()
+
+# ── SIGWINCH: paksa baca ulang ukuran terminal tiap resize/zoom ────────────────
+def _on_resize(signum, frame):
+    global console
+    try:
+        sz = os.get_terminal_size()
+        os.environ["COLUMNS"] = str(sz.columns)
+        os.environ["LINES"]   = str(sz.lines)
+        # Rich baca _width=None → auto re-read dari os.get_terminal_size()
+        console._width = None  # type: ignore[attr-defined]
     except Exception:
         pass
 
@@ -165,26 +178,6 @@ def flush_stdin():
         pass
 
 
-def sanitize_preview(text: str, maxlen: int = 80) -> str:
-    """Coba parse JSON → ambil field pesan, fallback ke ASCII printable."""
-    # coba parse JSON dulu → tampilkan field yang bermakna
-    try:
-        j = json.loads(text)
-        for key in ("message", "msg", "error", "detail", "status", "data", "info"):
-            if key in j:
-                v = j[key]
-                if isinstance(v, str) and v.strip():
-                    text = v
-                    break
-        else:
-            # tidak ada field teks tunggal → dump compact
-            text = json.dumps(j, ensure_ascii=True, separators=(",", ":"))
-    except Exception:
-        pass
-    text = re.sub(r"[^\x20-\x7E\n]", "", text)   # hanya ASCII printable
-    text = text.replace("[", "\\[")                   # escape Rich markup
-    text = text.replace("\n", " ").strip()
-    return (text[:maxlen] + "...") if len(text) > maxlen else text
 
 def _bar(fill_ratio: float) -> str:
     """Progress bar lebar dinamis mengikuti console.width."""
@@ -512,8 +505,6 @@ def ask_yrn(before_send: bool = False) -> str:
 def show_result(api: dict, phone: str, res: dict, round_n: int):
     clr()
     code     = res.get("status", 0)
-    body     = res.get("body", "")
-    prev     = sanitize_preview(body, console.width - 6)
     lbl, col = status_fmt(code)
     icon     = "✅" if is_ok(code) else "❌"
     bdr      = "color(46)" if is_ok(code) else "color(196)"
@@ -528,9 +519,6 @@ def show_result(api: dict, phone: str, res: dict, round_n: int):
     t.add_row("Round",  f"[color(245)]{round_n}[/color(245)]")
     t.add_row("HTTP",   f"[bold {col}]{code}   {lbl}[/bold {col}]")
     t.add_row("Waktu",  f"[color(245)]{datetime.now().strftime('%H:%M:%S')}[/color(245)]")
-    if prev:
-        t.add_row("Body", f"[color(242)]{prev}[/color(242)]")
-
     console.print(Panel(
         t,
         title=f" {icon}  [bold {col}]{lbl}[/bold {col}] ",
