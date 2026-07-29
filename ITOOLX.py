@@ -309,8 +309,10 @@ def safe_post(url: str, headers: dict, data=None, files=None,
 # ── Cloudscraper session singleton untuk PlanetBan (bypass Cloudflare WAF)
 _plb_scraper: cloudscraper.CloudScraper | None = None
 
-# ── requests.Session singleton untuk Olesera (reuse TCP/TLS, lebih cepat)
+# ── requests.Session + auto-refresh token untuk Olesera
 _ols_session: requests.Session | None = None
+_ols_token: str = ""
+_ols_token_expiry: float = 0.0   # unix timestamp kapan expire
 
 def _get_ols_session() -> requests.Session:
     global _ols_session
@@ -318,6 +320,49 @@ def _get_ols_session() -> requests.Session:
         _ols_session = requests.Session()
         _ols_session.headers.update({"Connection": "keep-alive"})
     return _ols_session
+
+def _refresh_ols_token() -> str:
+    """Login ke Olsera OAuth, simpan token + expiry. Return token string."""
+    global _ols_token, _ols_token_expiry
+    email    = os.environ.get("OLSERA_EMAIL", "")
+    password = os.environ.get("OLSERA_PASSWORD", "")
+    if not email or not password:
+        return _ols_token   # fallback ke token lama kalau env kosong
+    try:
+        r = _get_ols_session().post(
+            "https://api-dash.olsera.co.id/oauth/token",
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept":       "application/json",
+                "User-Agent":   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36",
+                "origin":       "https://olsera.com",
+                "referer":      "https://olsera.com/",
+            },
+            data={
+                "grant_type":    "password",
+                "username":      email,
+                "password":      password,
+                "client_id":     "2",
+                "client_secret": "",
+                "scope":         "",
+            },
+            timeout=15,
+        )
+        data = r.json()
+        tok  = data.get("access_token", "")
+        exp  = data.get("expires_in", 86399)
+        if tok:
+            _ols_token        = tok
+            _ols_token_expiry = time.time() + exp - 60  # refresh 1 menit sebelum expire
+    except Exception:
+        pass
+    return _ols_token
+
+def _get_ols_token() -> str:
+    """Kembalikan token yang masih valid, auto-refresh kalau sudah/hampir expire."""
+    if not _ols_token or time.time() >= _ols_token_expiry:
+        return _refresh_ols_token()
+    return _ols_token
 
 def _get_plb_scraper() -> cloudscraper.CloudScraper:
     """Buat atau kembalikan cloudscraper session yang sudah solve CF challenge."""
@@ -392,20 +437,29 @@ def send_planetban(phone: str) -> dict:
     return {"status": last_code, "body": last_body}
 
 def send_olesera(phone: str) -> dict:
-    payload = json.dumps({"use_otp_type": 3})
-    hdrs = _h(**{
-        "Content-Type":     "application/json",
-        "authorization":    "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6ImMzN2FlMjY1ODA0ODU0OWQ1MGQyN2FhODc3NTdjN2EwYWRiZDg4YmU1NmM0NTFhNjM2ZTMwMmY0NjNkNjEyYmIwNWQxMDdmNmVlZDU0Y2UxIn0.eyJhdWQiOiIyIiwianRpIjoiYzM3YWUyNjU4MDQ4NTQ5ZDUwZDI3YWE4Nzc1N2M3YTBhZGJkODhiZTU2YzQ1MWE2MzZlMzAyZjQ2M2Q2MTJiYjA1ZDEwN2Y2ZWVkNTRjZTEiLCJpYXQiOjE3ODUzNDM1NzQsIm5iZiI6MTc4NTM0MzU3NCwiZXhwIjoxNzg1NDI5OTc0LCJzdWIiOiI5ODYxMjQiLCJzY29wZXMiOltdfQ.ly3_99ytakq4VOMnRdhq7xgjNFI83o6Mkoktk-n7_4BhtKP-g1_EmFkeMXidSm6Lw2sjBKa_ty5bVjKuFQC56461AiBsxpx_F94XeUegYRBqBoJ2NRZXLf9uyAYSSss2lrRWo-baM2ZmZdtSNmdqbhUvfXI148J25D5E1lV98DH4ztR7W4iEkei4KwEyWLqlK_X0kr2BEzQOL93k-f2GiHsvxmEMzkE_-gZyvaJa9EHzjaBbVPB6f43wVcRVcUbTmJ4wykipw3YgC2eW2wVySXTL-pmletMxYDxlxJblwQeOQV9vPqYAwEDf7gB3f4F6BbLfGA5PcJjtGIIO5oZtUTFUEhzG6PHlvvTi2AiF4o9yUiffJjK16ho6bmIneP6jfnPpo9P7XT5SZ7Q9Dvf1fQmAr-C91apKkYCGGV1TNIsl7OJzEMSc1vAd4im9Oh8VaGQnKj9wLYZgZPWnjoUnkI5dtd0rxpMI7__26-nD4pw3nt9eUlb_UcHk1QdROfjmV2ebCdYQvLDBtcuAZcQOCeenX_YWhkTtA9rD3mSBcOQ1AuwxDkLJgjlOal5jJRxknVGEGLVWJcLaVv2Wu_78n5RlOgdKU7Vz81HnSxzg32q1olX1qWa9jawBqCSzTUnY7HoxkIUuWCCqHz92UN41sXT5ZI8bQRY3PszIFY0HaAs",
-        "origin":           "https://olsera.com",
-        "referer":          "https://olsera.com/",
-        "x-requested-with": "com.chimbori.hermitcrab",
-        "sec-fetch-site":   "cross-site",
-    })
-    return safe_post(
-        "https://api-dash.olsera.co.id/api/admin/v1/id/send-otp-register-v2",
-        headers=hdrs, data=payload,
-        session=_get_ols_session(),
-    )
+    def _do_send(token: str) -> dict:
+        payload = json.dumps({"use_otp_type": 3})
+        hdrs = _h(**{
+            "Content-Type":     "application/json",
+            "authorization":    f"Bearer {token}",
+            "origin":           "https://olsera.com",
+            "referer":          "https://olsera.com/",
+            "x-requested-with": "com.chimbori.hermitcrab",
+            "sec-fetch-site":   "cross-site",
+        })
+        return safe_post(
+            "https://api-dash.olsera.co.id/api/admin/v1/id/send-otp-register-v2",
+            headers=hdrs, data=payload,
+            session=_get_ols_session(),
+        )
+
+    res = _do_send(_get_ols_token())
+    # Kalau 403 (token expire di tengah jalan), force refresh lalu retry sekali
+    if res.get("status") == 403:
+        new_tok = _refresh_ols_token()
+        if new_tok:
+            res = _do_send(new_tok)
+    return res
 
 
 def send_ibox(phone: str) -> dict:
