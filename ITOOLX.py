@@ -33,6 +33,12 @@ except ImportError:
     from rich.rule import Rule
     from rich.text import Text
 
+try:
+    import cloudscraper
+except ImportError:
+    os.system("pip install cloudscraper -q")
+    import cloudscraper
+
 console = Console()
 
 # ══════════════════════════════════════════════════════════════
@@ -284,19 +290,79 @@ def safe_post(url: str, headers: dict, data=None, files=None,
 #  API FUNCTIONS
 # ══════════════════════════════════════════════════════════════
 
+# ── Cloudscraper session singleton untuk PlanetBan (bypass Cloudflare WAF)
+_plb_scraper: cloudscraper.CloudScraper | None = None
+
+def _get_plb_scraper() -> cloudscraper.CloudScraper:
+    """Buat atau kembalikan cloudscraper session yang sudah solve CF challenge."""
+    global _plb_scraper
+    if _plb_scraper is None:
+        _plb_scraper = cloudscraper.create_scraper(
+            browser={"browser": "chrome", "platform": "android", "desktop": False}
+        )
+    return _plb_scraper
+
 def send_planetban(phone: str) -> dict:
     num = phone if phone.startswith("62") else "62" + phone.lstrip("0")
     pb  = "0" + num[2:]
-    return safe_post(
-        "https://api.planetban.com/website/customer/request-otp",
-        headers=_h(**{
-            "Content-Type":     "application/json",
-            "origin":           "https://planetban.com",
-            "referer":          "https://planetban.com/",
-            "x-requested-with": "com.chimbori.hermitcrab",
-        }),
-        data=json.dumps({"phone": pb, "purpose": "register", "method": "whatsapp"}),
-    )
+
+    payload = json.dumps({"phone": pb, "purpose": "register", "method": "whatsapp"})
+    last_code, last_body = 0, ""
+
+    for attempt in range(3):
+        try:
+            ip  = rand_ip()
+            hdrs = {
+                "Content-Type":     "application/json",
+                "Accept":           "application/json, text/plain, */*",
+                "Accept-Language":  random.choice([
+                    "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+                    "id-ID,id;q=0.9,en;q=0.8",
+                ]),
+                "origin":           "https://planetban.com",
+                "referer":          "https://planetban.com/",
+                "x-requested-with": "com.chimbori.hermitcrab",
+                "X-Forwarded-For":  ip,
+                "X-Real-IP":        ip,
+                "X-Originating-IP": rand_ip(),
+            }
+
+            if attempt > 0:
+                global _plb_scraper
+                _plb_scraper = None        # reset session saat retry agar CF token segar
+                time.sleep(random.uniform(1.5, 3.0) * attempt)
+
+            scraper = _get_plb_scraper()
+            r = scraper.post(
+                "https://api.planetban.com/website/customer/request-otp",
+                headers=hdrs, data=payload, timeout=20,
+            )
+            last_code = r.status_code
+            last_body = r.text
+
+            if is_ok(r.status_code):
+                return {"status": r.status_code, "body": r.text}
+
+            if r.status_code == 429:
+                wait = float(r.headers.get("Retry-After", random.uniform(3, 7) * (attempt + 1)))
+                time.sleep(min(wait, 15))
+                continue
+
+            if r.status_code == 403:
+                # 403 = CF masih blokir → reset session dan coba lagi
+                _plb_scraper = None
+                time.sleep(random.uniform(2.0, 4.0))
+                continue
+
+            return {"status": r.status_code, "body": r.text}
+
+        except Exception as e:
+            last_code = 0
+            last_body = str(e)
+            _plb_scraper = None
+            time.sleep(1.5)
+
+    return {"status": last_code, "body": last_body}
 
 def dispatch(method: str, phone: str) -> dict:
     if method == "planetban": return send_planetban(phone)
