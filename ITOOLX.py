@@ -47,16 +47,10 @@ console = Console()
 
 APIS = {
     1: {"name": "PlanetBan",   "desc": "OTP WA",    "tag": "PLB",
-        "cooldown": 60, "color": "bright_red",     "method": "planetban"},
+        "cooldown": 65, "color": "bright_red",     "method": "planetban"},
     2: {"name": "Olesera",     "desc": "OTP SMS",   "tag": "OLS",
-        "cooldown": 60, "color": "bright_green",   "method": "olesera"},
-    3: {"name": "iBox",        "desc": "OTP WA",    "tag": "IBX",
-        "cooldown": 60, "color": "bright_blue",    "method": "ibox"},
-    4: {"name": "BliBli SMS",  "desc": "OTP SMS",   "tag": "BLS",
-        "cooldown": 60, "color": "bright_yellow",  "method": "bliblisms"},
-    5: {"name": "BliBli WA",   "desc": "OTP WA",    "tag": "BLW",
-        "cooldown": 60, "color": "bright_magenta", "method": "blibli"},
-    6: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
+        "cooldown": 65, "color": "bright_green",   "method": "olesera"},
+    3: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
         "cooldown": 0,  "color": "bold cyan",      "method": "all"},
 }
 
