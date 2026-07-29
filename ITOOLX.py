@@ -21,7 +21,6 @@ try:
     from rich import box
     from rich.rule import Rule
     from rich.text import Text
-    from rich.columns import Columns
 except ImportError:
     os.system("pip install rich -q")
     from rich.console import Console
@@ -33,7 +32,6 @@ except ImportError:
     from rich import box
     from rich.rule import Rule
     from rich.text import Text
-    from rich.columns import Columns
 
 console = Console()
 
@@ -110,10 +108,6 @@ def rand_sec_ch(ver: int = None) -> str:
     v = ver or random.choice([113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130])
     return random.choice(SEC_CH_BRANDS).replace("{v}", str(v))
 
-def rand_device_id() -> str:
-    """Random deviceId untuk bypass fingerprint."""
-    return str(uuid.uuid4())
-
 # ── Banner (ASCII art, tampil di print_home)
 BANNER = """\
 [bold cyan] ██╗████████╗ ██████╗  ██████╗ ██╗     ██╗  ██╗[/bold cyan]
@@ -168,11 +162,11 @@ def validate_phone(raw: str) -> str:
     return p
 
 def status_fmt(code: int):
-    if is_ok(code):  return "✓ SUCCESS", "bold green"
-    if code == 0:    return "✗ ERROR",   "bold red"
-    if code == 403:  return "✗ BLOCKED", "bold red"
-    if code == 429:  return "⚠ LIMIT",   "bold yellow"
-    return f"✗ HTTP {code}", "bold yellow"
+    if is_ok(code):  return "SUCCESS", "bold green"
+    if code == 0:    return "ERROR",   "bold red"
+    if code == 403:  return "BLOCKED", "bold red"
+    if code == 429:  return "LIMIT",   "bold yellow"
+    return f"HTTP {code}", "bold yellow"
 
 def clean_exit():
     clr()
@@ -372,10 +366,10 @@ def print_home(phone: str = ""):
     clr()
     console.print()
     console.print(Align.center(Text.from_markup(BANNER)))
-    console.print(Align.center(Rule(
+    console.print(Rule(
         "[dim cyan]Multi-API OTP Sender  ·  Termux Edition[/dim cyan]",
         style="dim cyan",
-    )))
+    ))
     console.print()
     console.print(Align.center(render_menu(phone)))
     console.print()
@@ -528,7 +522,6 @@ def build_r_live(phone: str, targets: list, stats: dict,
         )
 
     now = datetime.now().strftime("%H:%M:%S")
-    content = t.__rich_console__  # render table then cd_t inside panel
     from rich.console import Group
     return Panel(
         Group(t, Rule(style="dim cyan"), cd_t),
@@ -631,7 +624,7 @@ def ask_yrn(before_send: bool = False) -> str:
 
     console.print(Align.center(Panel(
         content, title=title, border_style=border,
-        box=box.HEAVY, padding=(0, 3), width=46,
+        box=box.HEAVY, padding=(0, 3), width=54,
     )))
     while True:
         try:
