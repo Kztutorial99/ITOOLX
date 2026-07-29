@@ -230,9 +230,20 @@ _RATE_LIMIT_HINTS = (
     "terlalu banyak", "tunggu", "cooldown", "throttle",
 )
 
+# 403 yang ini = auth/forbidden permanen, gak perlu retry
+_AUTH_BLOCK_HINTS = (
+    "tidak mendapatkan akses", "forbidden", "unauthorized",
+    "invalid token", "token expired", "unauthenticated",
+    "akses ditolak", "err:04", "err:03",
+)
+
 def _is_server_ratelimit(body: str) -> bool:
     b = body.lower()
     return any(h in b for h in _RATE_LIMIT_HINTS)
+
+def _is_auth_block(body: str) -> bool:
+    b = body.lower()
+    return any(h in b for h in _AUTH_BLOCK_HINTS)
 
 def safe_post(url: str, headers: dict, data=None, files=None,
               timeout: int = 15, retries: int = 3,
@@ -272,7 +283,8 @@ def safe_post(url: str, headers: dict, data=None, files=None,
                 continue
 
             if r.status_code == 403:
-                if _is_server_ratelimit(r.text):
+                # auth block / token expired → langsung return, jangan retry
+                if _is_auth_block(r.text) or not _is_server_ratelimit(r.text):
                     return {"status": r.status_code, "body": r.text}
                 time.sleep(random.uniform(1.0, 2.5))
                 continue
