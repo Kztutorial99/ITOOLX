@@ -235,9 +235,11 @@ def _is_server_ratelimit(body: str) -> bool:
     return any(h in b for h in _RATE_LIMIT_HINTS)
 
 def safe_post(url: str, headers: dict, data=None, files=None,
-              timeout: int = 15, retries: int = 3) -> dict:
+              timeout: int = 15, retries: int = 3,
+              session=None) -> dict:
     last_code = 0
     last_body = ""
+    poster = session if session is not None else requests
     for attempt in range(retries):
         try:
             hdrs = dict(headers)
@@ -253,9 +255,9 @@ def safe_post(url: str, headers: dict, data=None, files=None,
                 time.sleep(random.uniform(1.2, 3.0) * attempt)
 
             if files:
-                r = requests.post(url, headers=hdrs, files=files, timeout=timeout)
+                r = poster.post(url, headers=hdrs, files=files, timeout=timeout)
             else:
-                r = requests.post(url, headers=hdrs, data=data, timeout=timeout)
+                r = poster.post(url, headers=hdrs, data=data, timeout=timeout)
 
             last_code = r.status_code
             last_body = r.text
@@ -294,6 +296,16 @@ def safe_post(url: str, headers: dict, data=None, files=None,
 
 # ── Cloudscraper session singleton untuk PlanetBan (bypass Cloudflare WAF)
 _plb_scraper: cloudscraper.CloudScraper | None = None
+
+# ── requests.Session singleton untuk Olesera (reuse TCP/TLS, lebih cepat)
+_ols_session: requests.Session | None = None
+
+def _get_ols_session() -> requests.Session:
+    global _ols_session
+    if _ols_session is None:
+        _ols_session = requests.Session()
+        _ols_session.headers.update({"Connection": "keep-alive"})
+    return _ols_session
 
 def _get_plb_scraper() -> cloudscraper.CloudScraper:
     """Buat atau kembalikan cloudscraper session yang sudah solve CF challenge."""
@@ -380,6 +392,7 @@ def send_olesera(phone: str) -> dict:
     return safe_post(
         "https://api-dash.olsera.co.id/api/admin/v1/id/send-otp-register-v2",
         headers=hdrs, data=payload,
+        session=_get_ols_session(),
     )
 
 
