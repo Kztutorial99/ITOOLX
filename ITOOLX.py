@@ -619,7 +619,9 @@ def _cd_bar(rem: int, cd: int, width: int = 12) -> str:
     )
 
 def build_r_live(phone: str, targets: list, stats: dict,
-                 last_row: dict, round_counts: dict, title: str) -> Panel:
+                 last_row: dict, round_counts: dict, title: str,
+                 sending: set = None) -> Panel:
+    sending = sending or set()
     # ── hasil tabel
     t = Table(
         box=box.SIMPLE_HEAD, border_style="cyan",
@@ -644,8 +646,11 @@ def build_r_live(phone: str, targets: list, stats: dict,
         ts   = lr.get("time", "--:--:--")
         rn   = round_counts.get(m, 0)
 
-        lbl, col = status_fmt(code) if rn > 0 else ("──", "dim")
-        icon     = "✓" if (rn > 0 and is_ok(code)) else ("✗" if rn > 0 else "·")
+        if m in sending:
+            lbl, col, icon = "SENDING", "bold cyan", "⟳"
+        else:
+            lbl, col = status_fmt(code) if rn > 0 else ("──", "dim")
+            icon     = "✓" if (rn > 0 and is_ok(code)) else ("✗" if rn > 0 else "·")
 
         ok_c  = stats.get(m, {}).get("ok",  0)
         err_c = stats.get(m, {}).get("err", 0)
@@ -654,7 +659,7 @@ def build_r_live(phone: str, targets: list, stats: dict,
             f"[{api['color']}]{api['tag']}[/{api['color']}]",
             f"[{api['color']}]{api['name']}[/{api['color']}]",
             str(rn) if rn > 0 else "─",
-            f"[{col}]{code}[/{col}]" if rn > 0 else "[dim]─[/dim]",
+            f"[{col}]{code}[/{col}]" if (rn > 0 and m not in sending) else "[dim]─[/dim]",
             f"[{col}]{icon} {lbl}[/{col}]",
             f"[bold green]{ok_c}[/bold green]" if ok_c  else "[dim]0[/dim]",
             f"[bold red]{err_c}[/bold red]"    if err_c else "[dim]0[/dim]",
@@ -850,20 +855,19 @@ def session_single_r(api: dict, phone: str, start_round: int):
     last_row     = {}
     title        = f"[bold yellow]⟳  AUTO-REPEAT  {api['tag']}  ·  {phone}[/bold yellow]"
 
+    clr()
     try:
-        with Live(console=console, refresh_per_second=4, transient=True) as live:
+        with Live(console=console, refresh_per_second=4, transient=False) as live:
             while True:
                 rn = round_counts[api["method"]] + 1
                 round_counts[api["method"]] = rn
 
-                live.stop()
-                with console.status(
-                    f"[bold cyan]  ⟳  Auto  {api['name']}  #{rn}...[/bold cyan]",
-                    spinner="dots12",
-                ):
-                    res = dispatch(api["method"], phone)
+                # Tampilkan status SENDING tanpa hide live
+                live.update(build_r_live(phone, targets, stats,
+                                         last_row, round_counts, title,
+                                         sending={api["method"]}))
+                res = dispatch(api["method"], phone)
                 set_cd(phone, api["method"])
-                live.start()
 
                 code = res.get("status", 0)
                 if is_ok(code):
@@ -949,7 +953,8 @@ def session_all_r(phone: str, targets: list, initial_round: int = 0):
         return (was_sent(phone, api["method"]) and
                 get_rem(phone, api["method"], api["cooldown"]) == 0)
 
-    with Live(console=console, refresh_per_second=4, transient=True) as live:
+    clr()
+    with Live(console=console, refresh_per_second=4, transient=False) as live:
         while True:
             ready = [a for a in targets if needs_send(a)]
 
@@ -959,14 +964,12 @@ def session_all_r(phone: str, targets: list, initial_round: int = 0):
                     round_counts[api["method"]] += 1
                     rn = round_counts[api["method"]]
 
-                    live.stop()
-                    with console.status(
-                        f"[bold cyan]  ⟳  {api['name']}  #{rn}[/bold cyan]",
-                        spinner="dots12",
-                    ):
-                        res = dispatch(api["method"], phone)
+                    # Tampilkan status SENDING tanpa hide live
+                    live.update(build_r_live(phone, targets, stats,
+                                             last_row, round_counts, title,
+                                             sending={api["method"]}))
+                    res = dispatch(api["method"], phone)
                     set_cd(phone, api["method"])
-                    live.start()
 
                     code = res.get("status", 0)
                     if is_ok(code):
